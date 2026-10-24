@@ -1,0 +1,35 @@
+services:
+  web:
+    build: .
+    env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DATABASE_URL: sqlite:////app/data/db.sqlite3
+      DB_CONN_MAX_AGE: "0"
+      # Lokal (http) ishga tushirish uchun:
+      SECURE_SSL_REDIRECT: "false"
+      ENABLE_API_DOCS: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - sqlite_data:/app/data
+
+  # Muddati o‘tgan attemptlarni (brauzer yopilgan bo‘lsa ham) har daqiqada yopib turadi.
+  # Celery/Redis kerak emas (V1). SQLite bilan bitta web worker ishlatiladi.
+  finalizer:
+    build: .
+    env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DATABASE_URL: sqlite:////app/data/db.sqlite3
+      DB_CONN_MAX_AGE: "0"
+      RUN_MIGRATIONS: "0"
+    command: ["sh", "-c", "while true; do python manage.py finalize_expired_attempts; sleep 60; done"]
+    volumes:
+      - sqlite_data:/app/data
+    depends_on:
+      web:
+        condition: service_started
+
+volumes:
+  sqlite_data:

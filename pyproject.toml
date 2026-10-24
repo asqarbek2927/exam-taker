@@ -1,0 +1,17 @@
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py"]
+addopts = "-ra --strict-markers"
+filterwarnings = ["error::django.utils.deprecation.RemovedInDjango60Warning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ", "C4", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003", "RUF012", "DJ001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "common", "config"]
