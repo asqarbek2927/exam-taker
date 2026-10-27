@@ -4,6 +4,7 @@ from .views import (
     CourseTeacherViewSet,
     CourseViewSet,
     EnrollmentViewSet,
+    GroupDirectoryViewSet,
     GroupStudentViewSet,
     GroupViewSet,
     ModuleViewSet,
@@ -11,6 +12,7 @@ from .views import (
 
 router = routers.DefaultRouter(trailing_slash=False)
 router.register("courses", CourseViewSet, basename="course")
+router.register("groups", GroupDirectoryViewSet, basename="group-directory")
 
 courses_router = routers.NestedSimpleRouter(router, "courses", lookup="course")
 courses_router.register("teachers", CourseTeacherViewSet, basename="course-teacher")

@@ -12,6 +12,7 @@ from .filters import ResultFilter
 from .serializers import (
     AdminDashboardSerializer,
     ResultSerializer,
+    ResultSummarySerializer,
     StudentDashboardSerializer,
     TeacherDashboardSerializer,
 )
@@ -28,14 +29,19 @@ from .serializers import (
 class ResultListView(generics.ListAPIView):
     serializer_class = ResultSerializer
     filterset_class = ResultFilter
-    search_fields = ["student__full_name", "student__email", "assignment__exam__title"]
+    search_fields = [
+        "student__full_name",
+        "student__email",
+        "assignment__exam__title",
+        "assignment__exam__course__name",
+    ]
     ordering_fields = ["submitted_at", "percentage", "score", "attempt_number"]
     ordering = ["-submitted_at"]
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return ExamAttempt.objects.none()
-        return selectors.with_is_latest(selectors.results_visible_to(self.request.user))
+        return selectors.result_list(self.request.user)
 
     def list(self, request, *args, **kwargs):
         # Muddati o‘tgan faol attemptlar natijaga kirishi uchun avval yopiladi (TZ 11.6).
@@ -43,6 +49,32 @@ class ResultListView(generics.ListAPIView):
             selectors.attempts_visible_to(request.user), limit=200
         )
         return super().list(request, *args, **kwargs)
+
+
+@extend_schema(
+    tags=["results"],
+    responses={200: ResultSummarySerializer},
+    description=(
+        "Results page kartalari va grading progress. List bilan bir xil "
+        "filter/searchlarni oladi."
+    ),
+)
+class ResultSummaryView(generics.GenericAPIView):
+    serializer_class = ResultSummarySerializer
+    filterset_class = ResultFilter
+    search_fields = ResultListView.search_fields
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return ExamAttempt.objects.none()
+        return selectors.results_visible_to(self.request.user)
+
+    def get(self, request):
+        attempt_services.finalize_expired_attempts(
+            selectors.attempts_visible_to(request.user), limit=200
+        )
+        data = selectors.result_summary(self.filter_queryset(self.get_queryset()))
+        return Response(ResultSummarySerializer(data).data)
 
 
 class _DashboardView(APIView):

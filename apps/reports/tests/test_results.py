@@ -9,7 +9,8 @@ from apps.academics.tests.factories import (
     GroupStudentFactory,
     StudyGroupFactory,
 )
-from apps.assignments.tests.factories import AssignmentFactory
+from apps.assignments.choices import AudienceType
+from apps.assignments.tests.factories import AssignmentFactory, add_groups
 from apps.attempts.tests.factories import AttemptFactory
 from apps.users.tests.factories import StudentFactory, TeacherFactory
 
@@ -91,14 +92,46 @@ def test_pending_grading_hides_score(auth_client, ctx):
 
 
 def test_row_shape(auth_client, ctx):
+    group = StudyGroupFactory(course=ctx["course"], name="Frontend A")
+    ctx["assignment"].audience_type = AudienceType.GROUPS
+    ctx["assignment"].save(update_fields=["audience_type"])
+    add_groups(ctx["assignment"], group)
     finished(ctx["assignment"], ctx["students"][0])
     row = auth_client(ctx["teacher"]).get(RESULTS).json()["data"][0]
     assert set(row) == {
         "id", "assignment_id", "exam_id", "exam_title", "course", "student", "attempt_number",
-        "status", "started_at", "submitted_at", "score", "percentage", "passed", "is_latest",
+        "student_avatar_url", "audience_type", "groups", "status", "started_at", "submitted_at",
+        "score", "percentage", "passed", "is_latest",
     }  # fmt: skip
     assert row["course"]["id"] == str(ctx["course"].id)
     assert row["student"]["id"] == str(ctx["students"][0].id)
+    assert row["audience_type"] == "GROUPS"
+    assert row["groups"] == [{"id": str(group.id), "name": "Frontend A"}]
+
+
+def test_results_summary_matches_page_cards_and_is_role_scoped(auth_client, admin, ctx):
+    s1, s2, s3 = ctx["students"]
+    finished(ctx["assignment"], s1, percentage=88, passed=True)
+    finished(ctx["assignment"], s2, percentage=74, passed=True)
+    finished(ctx["assignment"], s3, status="PENDING_GRADING")
+    finished(AssignmentFactory(), StudentFactory(), percentage=10, passed=False)
+
+    teacher_summary = auth_client(ctx["teacher"]).get(f"{RESULTS}/summary")
+    assert teacher_summary.status_code == 200
+    assert teacher_summary.json() == {
+        "submissions": 3,
+        "awaiting_review": 1,
+        "graded": 2,
+        "average_score": 81.0,
+        "grading_progress_percentage": 67,
+    }
+    assert auth_client(admin).get(f"{RESULTS}/summary").json()["submissions"] == 4
+
+
+def test_results_search_includes_course_name(auth_client, admin, ctx):
+    result = finished(ctx["assignment"], ctx["students"][0])
+    response = auth_client(admin).get(RESULTS, {"search": ctx["course"].name})
+    assert [item["id"] for item in response.json()["data"]] == [str(result.id)]
 
 
 # ------------------------------- latest -------------------------------

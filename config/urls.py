@@ -10,6 +10,7 @@ from apps.assignments.urls import router as assignments_router
 from apps.attempts.urls import grading_urlpatterns
 from apps.attempts.urls import router as attempts_router
 from apps.exams.urls import router as exams_router
+from apps.notifications.urls import router as notifications_router
 from apps.questions.urls import router as questions_router
 from apps.reports.urls import urlpatterns as reports_urlpatterns
 from apps.users.urls import auth_urlpatterns
@@ -23,6 +24,7 @@ api_router.registry.extend(questions_router.registry)
 api_router.registry.extend(exams_router.registry)
 api_router.registry.extend(assignments_router.registry)
 api_router.registry.extend(attempts_router.registry)
+api_router.registry.extend(notifications_router.registry)
 
 api_v1_patterns = [
     *auth_urlpatterns,

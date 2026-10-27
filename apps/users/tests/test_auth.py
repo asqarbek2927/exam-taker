@@ -11,6 +11,7 @@ LOGIN = "/api/v1/auth/login"
 REFRESH = "/api/v1/auth/refresh"
 LOGOUT = "/api/v1/auth/logout"
 ME = "/api/v1/auth/me"
+CHANGE_PASSWORD = "/api/v1/auth/change-password"
 
 
 def login(client, user, password=DEFAULT_PASSWORD):
@@ -109,6 +110,109 @@ def test_me_returns_current_user(api_client, teacher):
     assert response.status_code == 200
     assert response.json()["email"] == teacher.email
     assert "password" not in response.json()
+
+
+def test_me_updates_language_preference(api_client, teacher):
+    bearer(api_client, login(api_client, teacher).json()["access_token"])
+
+    response = api_client.patch(ME, {"language": "uz"}, format="json")
+    assert response.status_code == 200
+    assert response.json()["language"] == "uz"
+    teacher.refresh_from_db()
+    assert teacher.language == "uz"
+
+    invalid = api_client.patch(ME, {"language": "de"}, format="json")
+    assert invalid.status_code == 422
+    assert "language" in invalid.json()["errors"]
+
+
+def test_me_updates_profile_but_keeps_managed_fields_read_only(api_client, teacher):
+    bearer(api_client, login(api_client, teacher).json()["access_token"])
+
+    response = api_client.patch(
+        ME,
+        {
+            "full_name": "Updated Teacher",
+            "phone_number": "+998 90 123 45 67",
+            "avatar_url": None,
+            "email": "hacker@example.com",
+            "role": "SUPER_ADMIN",
+            "status": "INACTIVE",
+        },
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.json()["full_name"] == "Updated Teacher"
+    assert response.json()["phone_number"] == "+998 90 123 45 67"
+    assert response.json()["avatar_url"] == ""
+    teacher.refresh_from_db()
+    assert teacher.email != "hacker@example.com"
+    assert teacher.role == "TEACHER"
+    assert teacher.status == "ACTIVE"
+
+
+@pytest.mark.parametrize("phone_number", ["123", "not-a-phone", "+998 abc"])
+def test_me_rejects_invalid_phone(api_client, teacher, phone_number):
+    bearer(api_client, login(api_client, teacher).json()["access_token"])
+    response = api_client.patch(ME, {"phone_number": phone_number}, format="json")
+    assert response.status_code == 422
+    assert "phone_number" in response.json()["errors"]
+
+
+def test_change_own_password_requires_current_password(api_client, teacher):
+    bearer(api_client, login(api_client, teacher).json()["access_token"])
+    new_password = "An0ther-Str0ng-Pass!"
+
+    wrong = api_client.post(
+        CHANGE_PASSWORD,
+        {
+            "current_password": "wrong-password",
+            "new_password": new_password,
+            "confirm_new_password": new_password,
+        },
+        format="json",
+    )
+    assert wrong.status_code == 422
+    assert "current_password" in wrong.json()["errors"]
+
+    changed = api_client.post(
+        CHANGE_PASSWORD,
+        {
+            "current_password": DEFAULT_PASSWORD,
+            "new_password": new_password,
+            "confirm_new_password": new_password,
+        },
+        format="json",
+    )
+    assert changed.status_code == 204
+    assert login(api_client, teacher, password=DEFAULT_PASSWORD).status_code == 401
+    assert login(api_client, teacher, password=new_password).status_code == 200
+
+
+@pytest.mark.parametrize(
+    "new_password,confirm_new_password",
+    [
+        ("An0ther-Str0ng-Pass!", "Different-Str0ng-Pass!"),
+        ("short", "short"),
+        ("lowercase-password1!", "lowercase-password1!"),
+        ("UPPERCASE-PASSWORD1!", "UPPERCASE-PASSWORD1!"),
+        ("No-Numbers-Here!", "No-Numbers-Here!"),
+    ],
+)
+def test_change_own_password_validates_confirmation_and_strength(
+    api_client, teacher, new_password, confirm_new_password
+):
+    bearer(api_client, login(api_client, teacher).json()["access_token"])
+    response = api_client.post(
+        CHANGE_PASSWORD,
+        {
+            "current_password": DEFAULT_PASSWORD,
+            "new_password": new_password,
+            "confirm_new_password": confirm_new_password,
+        },
+        format="json",
+    )
+    assert response.status_code == 422
 
 
 def test_me_with_invalid_token_returns_401(api_client):

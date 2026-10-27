@@ -17,9 +17,16 @@ from common.serializers import ArchivedResponseSerializer
 
 from . import selectors, services
 from .choices import EnrollmentStatus, ModuleStatus
-from .filters import CourseFilter, CourseTeacherFilter, EnrollmentFilter, ModuleFilter
+from .filters import (
+    CourseFilter,
+    CourseTeacherFilter,
+    EnrollmentFilter,
+    GroupDirectoryFilter,
+    ModuleFilter,
+)
 from .models import CourseTeacher, Enrollment, GroupStudent, Module, StudyGroup
 from .serializers import (
+    CourseCatalogSummarySerializer,
     CourseDetailSerializer,
     CourseListSerializer,
     CourseTeacherCreateSerializer,
@@ -29,6 +36,8 @@ from .serializers import (
     EnrollmentCreateSerializer,
     EnrollmentSerializer,
     EnrollmentUpdateSerializer,
+    GroupDirectorySummarySerializer,
+    GroupDirectoryWriteSerializer,
     GroupSerializer,
     GroupStudentCreateSerializer,
     GroupStudentSerializer,
@@ -110,6 +119,17 @@ class CourseViewSet(
     def archive(self, request, pk=None):
         course = services.archive_course(self.get_object())
         return self._detail_response(course.pk)
+
+    @extend_schema(tags=["courses"], request=None, responses={200: CourseDetailSerializer})
+    @action(detail=True, methods=["post"])
+    def restore(self, request, pk=None):
+        course = services.restore_course(self.get_object())
+        return self._detail_response(course.pk)
+
+    @extend_schema(tags=["courses"], responses={200: CourseCatalogSummarySerializer})
+    @action(detail=False, methods=["get"])
+    def summary(self, request):
+        return Response(selectors.course_catalog_summary())
 
 
 # --------------------------------------------------------------------------
@@ -444,13 +464,102 @@ class GroupViewSet(
         group = self.get_object()
         serializer = GroupWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        if "name" in serializer.validated_data:
-            services.rename_group(group, name=serializer.validated_data["name"])
+        services.update_group(group, **serializer.validated_data)
         return self._group_response(group.pk)
 
     def destroy(self, request, *args, **kwargs):
         services.delete_group(self.get_object())
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(tags=["groups"], request=None, responses={200: GroupSerializer})
+    @action(detail=True, methods=["post"])
+    def archive(self, request, *args, **kwargs):
+        group = services.archive_group(self.get_object())
+        return self._group_response(group.pk)
+
+    @extend_schema(tags=["groups"], request=None, responses={200: GroupSerializer})
+    @action(detail=True, methods=["post"])
+    def restore(self, request, *args, **kwargs):
+        group = services.restore_group(self.get_object())
+        return self._group_response(group.pk)
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["group-directory"]),
+    retrieve=extend_schema(tags=["group-directory"]),
+    create=extend_schema(
+        tags=["group-directory"],
+        request=GroupDirectoryWriteSerializer,
+        responses={201: GroupSerializer},
+    ),
+    partial_update=extend_schema(
+        tags=["group-directory"],
+        request=GroupWriteSerializer,
+        responses={200: GroupSerializer},
+    ),
+)
+class GroupDirectoryViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsSuperAdmin]
+    filterset_class = GroupDirectoryFilter
+    search_fields = ["name", "course__name"]
+    ordering_fields = ["name", "created_at", "students_count", "course__name"]
+    ordering = ["name", "created_at"]
+    lookup_value_regex = UUID_REGEX
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return StudyGroup.objects.none()
+        return selectors.group_directory()
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return GroupDirectoryWriteSerializer
+        if self.action == "partial_update":
+            return GroupWriteSerializer
+        return GroupSerializer
+
+    def _group_response(self, group_id, status_code=status.HTTP_200_OK) -> Response:
+        group = selectors.group_directory().get(pk=group_id)
+        return Response(GroupSerializer(group).data, status=status_code)
+
+    def create(self, request, *args, **kwargs):
+        serializer = GroupDirectoryWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        group = services.create_group(**serializer.validated_data)
+        return self._group_response(group.pk, status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        group = self.get_object()
+        serializer = GroupWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        services.update_group(group, **serializer.validated_data)
+        return self._group_response(group.pk)
+
+    @extend_schema(tags=["group-directory"], request=None, responses={200: GroupSerializer})
+    @action(detail=True, methods=["post"])
+    def archive(self, request, pk=None):
+        group = services.archive_group(self.get_object())
+        return self._group_response(group.pk)
+
+    @extend_schema(tags=["group-directory"], request=None, responses={200: GroupSerializer})
+    @action(detail=True, methods=["post"])
+    def restore(self, request, pk=None):
+        group = services.restore_group(self.get_object())
+        return self._group_response(group.pk)
+
+    @extend_schema(
+        tags=["group-directory"], responses={200: GroupDirectorySummarySerializer}
+    )
+    @action(detail=False, methods=["get"])
+    def summary(self, request):
+        return Response(selectors.group_directory_summary())
 
 
 # --------------------------------------------------------------------------

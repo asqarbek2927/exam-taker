@@ -26,7 +26,7 @@ from apps.questions.choices import QuestionType
 from apps.users.choices import UserStatus
 from common.exceptions import AccessDeniedError, BusinessRuleError, ConflictError
 
-from .choices import AttemptStatus
+from .choices import AttemptStatus, FinalizationReason
 from .grading import grade_choice_answer, money, passed, percentage
 from .models import ExamAttempt, StudentAnswer, StudentAnswerOption
 
@@ -82,12 +82,20 @@ def recalculate_attempt(attempt: ExamAttempt) -> ExamAttempt:
         attempt.percentage = percentage(score, total)
         attempt.passed = passed(score, total, exam.passing_score_percent)
     attempt.save(
-        update_fields=["status", "score", "percentage", "passed", "submitted_at", "updated_at"]
+        update_fields=[
+            "status",
+            "score",
+            "percentage",
+            "passed",
+            "submitted_at",
+            "finalization_reason",
+            "updated_at",
+        ]
     )
     return attempt
 
 
-def _finalize(attempt: ExamAttempt, *, submitted_at: datetime) -> ExamAttempt:
+def _finalize(attempt: ExamAttempt, *, submitted_at: datetime, reason: str) -> ExamAttempt:
     """Attemptni yopadi: javoblarni to‘ldiradi, objective savollarni baholaydi, natijani hisoblaydi.
 
     Chaqiruvchi `transaction.atomic` ichida va `attempt` qatorini qulflagan bo‘lishi kerak.
@@ -129,6 +137,7 @@ def _finalize(attempt: ExamAttempt, *, submitted_at: datetime) -> ExamAttempt:
     StudentAnswer.objects.bulk_update(to_update, ["is_correct", "points_awarded"])
 
     attempt.submitted_at = submitted_at
+    attempt.finalization_reason = reason
     return recalculate_attempt(attempt)
 
 
@@ -144,7 +153,11 @@ def finalize_if_expired(attempt_id, *, now: datetime | None = None) -> bool:
         )
         if attempt is None or not is_expired(attempt, now):
             return False
-        _finalize(attempt, submitted_at=attempt.deadline_at)
+        _finalize(
+            attempt,
+            submitted_at=attempt.deadline_at,
+            reason=FinalizationReason.TIMEOUT,
+        )
         return True
 
 
@@ -281,7 +294,11 @@ def save_answer(
         if attempt.status != AttemptStatus.IN_PROGRESS:
             raise ConflictError("Attempt allaqachon yakunlangan.")
         if is_expired(attempt, now):
-            _finalize(attempt, submitted_at=attempt.deadline_at)
+            _finalize(
+                attempt,
+                submitted_at=attempt.deadline_at,
+                reason=FinalizationReason.TIMEOUT,
+            )
             expired = True  # xato blokdan KEYIN ko‘tariladi, aks holda yopilish rollback bo‘lardi
         else:
             answer = _store_answer(attempt, exam_question_id, option_ids, text_answer)
@@ -300,8 +317,10 @@ def submit_attempt(*, student, attempt_id) -> ExamAttempt:
     attempt = _lock_attempt(attempt_id, student=student)
     if attempt.status != AttemptStatus.IN_PROGRESS:
         raise ConflictError("Attempt allaqachon yakunlangan.")
-    submitted_at = attempt.deadline_at if is_expired(attempt, now) else now
-    return _finalize(attempt, submitted_at=submitted_at)
+    expired = is_expired(attempt, now)
+    submitted_at = attempt.deadline_at if expired else now
+    reason = FinalizationReason.TIMEOUT if expired else FinalizationReason.USER_SUBMIT
+    return _finalize(attempt, submitted_at=submitted_at, reason=reason)
 
 
 # --------------------------------------------------------------------------

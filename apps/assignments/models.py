@@ -18,9 +18,12 @@ class ExamAssignment(UUIDModel, TimeStampedModel):
     end_at = models.DateTimeField(null=True, blank=True)  # NULL = deadline yo‘q
     duration_minutes = models.PositiveIntegerField()
     max_attempts = models.PositiveIntegerField(null=True, blank=True)  # NULL = cheksiz
+    published_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
         max_length=10, choices=AssignmentStatus.choices, default=AssignmentStatus.DRAFT
     )
+    is_archived = models.BooleanField(default=False, db_index=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "exam_assignments"
@@ -72,5 +75,25 @@ class ExamAssignmentStudent(UUIDModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["assignment", "student"], name="uniq_assignment_student"
+            ),
+        ]
+
+
+class ExamAssignmentRecipient(UUIDModel):
+    """Assignment birinchi marta e’lon qilingandagi studentlar snapshoti."""
+
+    assignment = models.ForeignKey(
+        ExamAssignment, on_delete=models.CASCADE, related_name="recipients"
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="assignment_recipients"
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "exam_assignment_recipients"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["assignment", "student"], name="uniq_assignment_recipient"
             ),
         ]

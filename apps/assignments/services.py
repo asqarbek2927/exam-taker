@@ -6,7 +6,7 @@ from datetime import datetime
 from django.db import transaction
 from django.utils import timezone
 
-from apps.academics.choices import CourseStatus, EnrollmentStatus
+from apps.academics.choices import CourseStatus, EnrollmentStatus, GroupStatus
 from apps.academics.models import Course, Enrollment, StudyGroup
 from apps.academics.selectors import has_course_access
 from apps.exams.choices import ExamStatus
@@ -15,7 +15,12 @@ from apps.users.models import User
 from common.exceptions import AccessDeniedError, BusinessRuleError, ConflictError
 
 from .choices import AssignmentStatus, AudienceType
-from .models import ExamAssignment, ExamAssignmentGroup, ExamAssignmentStudent
+from .models import (
+    ExamAssignment,
+    ExamAssignmentGroup,
+    ExamAssignmentRecipient,
+    ExamAssignmentStudent,
+)
 from .selectors import assignment_has_attempts
 
 # Attempt boshlangan assignmentda faqat `end_at` uzaytirish mumkin (TZ 10.4).
@@ -63,10 +68,10 @@ def _validate_exam_ready(exam: Exam) -> None:
 
 
 def _validate_audience(
-    course: Course,
-    audience_type: str,
-    groups: Sequence[StudyGroup],
-    students: Sequence[User],
+        course: Course,
+        audience_type: str,
+        groups: Sequence[StudyGroup],
+        students: Sequence[User],
 ) -> None:
     """TZ 10.2: audience turiga mos ro‘yxat; group/student shu kursga tegishli, ACTIVE yozilgan."""
     if len({g.id for g in groups}) != len(groups):
@@ -87,6 +92,8 @@ def _validate_audience(
         for group in groups:
             if group.course_id != course.id:
                 raise BusinessRuleError(f"‘{group.name}’ guruhi bu kursga tegishli emas.")
+            if group.status != GroupStatus.ACTIVE:
+                raise BusinessRuleError(f"‘{group.name}’ guruhi arxivlangan.")
     elif audience_type == AudienceType.SPECIFIC_STUDENTS:
         if not students:
             raise BusinessRuleError("SPECIFIC_STUDENTS uchun kamida 1 ta student tanlang.")
@@ -109,7 +116,7 @@ def _validate_audience(
 
 
 def _replace_audience(
-    assignment: ExamAssignment, groups: Sequence[StudyGroup], students: Sequence[User]
+        assignment: ExamAssignment, groups: Sequence[StudyGroup], students: Sequence[User]
 ) -> None:
     assignment.assignment_groups.all().delete()
     assignment.assignment_students.all().delete()
@@ -121,22 +128,51 @@ def _replace_audience(
     )
 
 
+def _snapshot_recipients(assignment: ExamAssignment) -> None:
+    """Birinchi publish paytidagi eligible studentlarni tarix uchun saqlaydi."""
+    if assignment.recipients.exists():
+        return
+    from .selectors import eligible_students
+
+    ExamAssignmentRecipient.objects.bulk_create(
+        ExamAssignmentRecipient(assignment=assignment, student_id=student_id)
+        for student_id in eligible_students(assignment).values_list("id", flat=True)
+    )
+
+
+def _notify_assignment_published(assignment: ExamAssignment) -> None:
+    from apps.notifications.choices import NotificationType
+    from apps.notifications.services import create_notifications
+
+    create_notifications(
+        recipient_ids=assignment.recipients.values_list("student_id", flat=True),
+        type=NotificationType.ASSIGNMENT,
+        title="New exam assigned",
+        message=f"{assignment.exam.title} is now available.",
+        data={
+            "assignment_id": str(assignment.id),
+            "exam_id": str(assignment.exam_id),
+            "course_id": str(assignment.exam.course_id),
+        },
+    )
+
+
 # --------------------------------------------------------------------------
 # Create
 # --------------------------------------------------------------------------
 @transaction.atomic
 def create_assignment(
-    *,
-    user,
-    exam: Exam,
-    audience_type: str,
-    start_at: datetime,
-    end_at: datetime | None,
-    duration_minutes: int,
-    max_attempts: int | None,
-    groups: Sequence[StudyGroup] = (),
-    students: Sequence[User] = (),
-    is_draft: bool = False,
+        *,
+        user,
+        exam: Exam,
+        audience_type: str,
+        start_at: datetime,
+        end_at: datetime | None,
+        duration_minutes: int,
+        max_attempts: int | None,
+        groups: Sequence[StudyGroup] = (),
+        students: Sequence[User] = (),
+        is_draft: bool = False,
 ) -> ExamAssignment:
     course = exam.course
     if not has_course_access(user, course):
@@ -156,9 +192,13 @@ def create_assignment(
         end_at=end_at,
         duration_minutes=duration_minutes,
         max_attempts=max_attempts,
+        published_at=None if is_draft else timezone.now(),
         status=AssignmentStatus.DRAFT if is_draft else AssignmentStatus.PUBLISHED,
     )
     _replace_audience(assignment, groups, students)
+    if not is_draft:
+        _snapshot_recipients(assignment)
+        _notify_assignment_published(assignment)
     return assignment
 
 
@@ -169,6 +209,7 @@ def create_assignment(
 def update_assignment(*, assignment: ExamAssignment, **fields) -> ExamAssignment:
     """`fields`: audience_type, groups, students, start_at, end_at, duration_minutes,
     max_attempts."""
+    _ensure_not_archived(assignment)
     if assignment.status in (AssignmentStatus.COMPLETED, AssignmentStatus.CANCELLED):
         raise BusinessRuleError(
             "Yakunlangan yoki bekor qilingan e’lonni tahrirlab bo‘lmaydi "
@@ -236,12 +277,60 @@ def _check_editable_after_attempts(assignment: ExamAssignment, fields: dict) -> 
 def transition(*, assignment: ExamAssignment, action: str) -> ExamAssignment:
     sources, target = TRANSITIONS[action]
     assignment = ExamAssignment.objects.select_for_update(of=("self",)).get(pk=assignment.pk)
+    _ensure_not_archived(assignment)
     if assignment.status not in sources:
         raise ConflictError(f"`{action}` amalini {assignment.status} holatida bajarib bo‘lmaydi.")
+    first_publish = action == "publish" and assignment.published_at is None
     if action == "publish":
         _ensure_course_editable(assignment.exam.course)
         _validate_exam_ready(assignment.exam)
         _validate_not_expired(assignment.end_at)
+        _snapshot_recipients(assignment)
+        if assignment.published_at is None:
+            assignment.published_at = timezone.now()
     assignment.status = target
-    assignment.save(update_fields=["status", "updated_at"])
+    update_fields = ["status", "updated_at"]
+    if action == "publish":
+        update_fields.append("published_at")
+    assignment.save(update_fields=update_fields)
+    if first_publish:
+        _notify_assignment_published(assignment)
+    return assignment
+
+
+def _ensure_not_archived(assignment: ExamAssignment) -> None:
+    if assignment.is_archived:
+        raise BusinessRuleError("Arxivlangan assignmentni avval arxivdan qaytaring.")
+
+
+@transaction.atomic
+def archive_assignment(*, assignment: ExamAssignment) -> ExamAssignment:
+    """Faqat yakunlangan/bekor qilingan assignmentni katalogdan arxivlaydi."""
+    assignment = ExamAssignment.objects.select_for_update(of=("self",)).get(pk=assignment.pk)
+    if assignment.is_archived:
+        return assignment
+
+    from .selectors import effective_status_of
+
+    if effective_status_of(assignment) not in {
+        AssignmentStatus.COMPLETED,
+        AssignmentStatus.CANCELLED,
+    }:
+        raise BusinessRuleError(
+            "Faqat COMPLETED yoki CANCELLED assignmentni arxivlash mumkin."
+        )
+    assignment.is_archived = True
+    assignment.archived_at = timezone.now()
+    assignment.save(update_fields=["is_archived", "archived_at", "updated_at"])
+    return assignment
+
+
+@transaction.atomic
+def unarchive_assignment(*, assignment: ExamAssignment) -> ExamAssignment:
+    assignment = ExamAssignment.objects.select_for_update(of=("self",)).get(pk=assignment.pk)
+    if not assignment.is_archived:
+        return assignment
+    assignment.is_archived = False
+    assignment.archived_at = None
+    assignment.save(update_fields=["is_archived", "archived_at", "updated_at"])
     return assignment

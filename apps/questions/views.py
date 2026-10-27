@@ -18,6 +18,7 @@ from .choices import QuestionStatus
 from .filters import QuestionFilter
 from .models import Question
 from .serializers import (
+    QuestionBankSummarySerializer,
     QuestionCreateSerializer,
     QuestionDetailSerializer,
     QuestionListSerializer,
@@ -52,8 +53,8 @@ from .serializers import (
     destroy=extend_schema(
         tags=["questions"],
         description=(
-            "Imtihonda ishlatilmagan savol o‘chiriladi (204). Ishlatilgan bo‘lsa — "
-            '`ARCHIVED` (200, `{"archived": true}`).'
+                "Imtihonda ishlatilmagan savol o‘chiriladi (204). Ishlatilgan bo‘lsa — "
+                '`ARCHIVED` (200, `{"archived": true}`).'
         ),
         responses={
             204: OpenApiResponse(description="Savol o‘chirildi."),
@@ -98,6 +99,16 @@ class QuestionViewSet(
         question = selectors.with_options(Question.objects.all()).get(pk=question_id)
         return Response(QuestionDetailSerializer(question).data, status=status_code)
 
+    @extend_schema(
+        tags=["questions"],
+        responses={200: QuestionBankSummarySerializer},
+        description="Role doirasidagi question bank statistika kartalari.",
+    )
+    @action(detail=False, methods=["get"])
+    def summary(self, request):
+        data = selectors.question_bank_summary(request.user)
+        return Response(QuestionBankSummarySerializer(data).data)
+
     def create(self, request, *args, **kwargs):
         serializer = QuestionCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -121,4 +132,10 @@ class QuestionViewSet(
     @action(detail=True, methods=["post"])
     def archive(self, request, pk=None):
         question = services.archive_question(self.get_object())
+        return self._detail_response(question.pk)
+
+    @extend_schema(tags=["questions"], request=None, responses={200: QuestionDetailSerializer})
+    @action(detail=True, methods=["post"])
+    def restore(self, request, pk=None):
+        question = services.restore_question(self.get_object())
         return self._detail_response(question.pk)

@@ -2,7 +2,17 @@
 
 from decimal import Decimal
 
-from django.db.models import Count, DecimalField, Prefetch, Q, QuerySet, Sum
+from django.db.models import (
+    Count,
+    DecimalField,
+    IntegerField,
+    OuterRef,
+    Prefetch,
+    Q,
+    QuerySet,
+    Subquery,
+    Sum,
+)
 from django.db.models.functions import Coalesce
 
 from apps.academics.models import CourseTeacher
@@ -10,7 +20,19 @@ from apps.assignments.choices import AssignmentStatus
 from apps.assignments.models import ExamAssignment
 from apps.users.choices import UserRole
 
+from .choices import ExamStatus
 from .models import Exam, ExamModule, ExamQuestion
+
+
+def _count_for_exam(model, exam_field: str):
+    subquery = (
+        model.objects.filter(**{exam_field: OuterRef("pk")})
+        .order_by()
+        .values(exam_field)
+        .annotate(n=Count("pk"))
+        .values("n")
+    )
+    return Coalesce(Subquery(subquery, output_field=IntegerField()), 0)
 
 
 def exams_visible_to(user) -> QuerySet[Exam]:
@@ -29,6 +51,8 @@ def with_totals(qs: QuerySet[Exam]) -> QuerySet[Exam]:
     # Bitta join (exam_questions) — Count va Sum bir-birini ko‘paytirmaydi.
     return qs.annotate(
         questions_count=Count("exam_questions"),
+        modules_count=_count_for_exam(ExamModule, "exam"),
+        uses_count=_count_for_exam(ExamAssignment, "exam"),
         total_points=Coalesce(
             Sum("exam_questions__points"),
             Decimal("0"),
@@ -39,6 +63,15 @@ def with_totals(qs: QuerySet[Exam]) -> QuerySet[Exam]:
 
 def exam_list(user) -> QuerySet[Exam]:
     return with_totals(exams_visible_to(user)).select_related("course", "created_by")
+
+
+def exam_library_summary(user) -> dict:
+    return exams_visible_to(user).aggregate(
+        total_exams=Count("pk"),
+        draft_exams=Count("pk", filter=Q(status=ExamStatus.DRAFT)),
+        ready_exams=Count("pk", filter=Q(status=ExamStatus.READY)),
+        archived_exams=Count("pk", filter=Q(status=ExamStatus.ARCHIVED)),
+    )
 
 
 def exam_detail(qs: QuerySet[Exam]) -> QuerySet[Exam]:
@@ -54,7 +87,9 @@ def exam_detail(qs: QuerySet[Exam]) -> QuerySet[Exam]:
             ),
             Prefetch(
                 "exam_questions",
-                queryset=ExamQuestion.objects.select_related("question__created_by")
+                queryset=ExamQuestion.objects.select_related(
+                    "question__course", "question__module", "question__created_by"
+                )
                 .prefetch_related("question__options")
                 .order_by("position"),
             ),

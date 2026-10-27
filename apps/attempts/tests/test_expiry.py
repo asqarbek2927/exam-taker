@@ -5,7 +5,7 @@ import pytest
 from django.core.management import call_command
 from django.utils import timezone
 
-from apps.attempts.choices import AttemptStatus
+from apps.attempts.choices import AttemptStatus, FinalizationReason
 from apps.attempts.models import ExamAttempt
 from apps.attempts.services import finalize_expired_attempts, finalize_if_expired
 from apps.attempts.tests.conftest import option_id
@@ -37,6 +37,7 @@ def test_finalize_if_expired_grades_saved_answers_and_is_idempotent(api, world):
     assert attempt.status == AttemptStatus.GRADED
     assert attempt.score == 2
     assert attempt.submitted_at == attempt.deadline_at
+    assert attempt.finalization_reason == FinalizationReason.TIMEOUT
     assert finalize_if_expired(attempt_id) is False
 
 

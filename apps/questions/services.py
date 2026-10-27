@@ -57,14 +57,14 @@ def _is_locked(question: Question) -> bool:
 
 @transaction.atomic
 def create_question(
-    *,
-    user,
-    course: Course,
-    module: Module,
-    type: str,
-    text: str,
-    options: list[dict],
-    default_points: Decimal | None = None,
+        *,
+        user,
+        course: Course,
+        module: Module,
+        type: str,
+        text: str,
+        options: list[dict],
+        default_points: Decimal | None = None,
 ) -> Question:
     if not has_course_access(user, course):
         raise AccessDeniedError("Siz bu kursga biriktirilmagansiz.")
@@ -121,6 +121,17 @@ def archive_question(question: Question) -> Question:
     if question.status != QuestionStatus.ARCHIVED:
         question.status = QuestionStatus.ARCHIVED
         question.save(update_fields=["status", "updated_at"])
+    return question
+
+
+def restore_question(question: Question) -> Question:
+    """Arxivlangan savolni yana question bankda faol qiladi."""
+    if question.status == QuestionStatus.ACTIVE:
+        return question
+    _ensure_course_editable(question.course)
+    _ensure_module_usable(question.course, question.module)
+    question.status = QuestionStatus.ACTIVE
+    question.save(update_fields=["status", "updated_at"])
     return question
 
 

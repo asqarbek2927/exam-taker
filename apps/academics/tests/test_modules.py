@@ -48,7 +48,7 @@ def test_admin_can_create_module_with_explicit_position(auth_client, admin):
 
 
 def test_any_assigned_teacher_can_edit_shared_module(auth_client, teacher, course):
-    other = CourseTeacherFactory(course=course).teacher
+    other = CourseTeacherFactory(course=course, type="SUPPORT").teacher
     module = ModuleFactory(course=course, title="Old")
     response = auth_client(other).patch(url(course, module), {"title": "New"}, format="json")
     assert response.status_code == 200

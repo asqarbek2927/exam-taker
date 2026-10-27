@@ -1,4 +1,4 @@
-from config.settings.base import *
+from config.settings.base import *  # noqa: F403
 from config.settings.base import database_from_env
 
 DATABASES = {"default": database_from_env()}

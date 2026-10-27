@@ -19,6 +19,7 @@ from .serializers import (
     AssignmentCreateSerializer,
     AssignmentDetailSerializer,
     AssignmentSerializer,
+    AssignmentSummarySerializer,
     AssignmentUpdateSerializer,
     StudentAssignmentSerializer,
 )
@@ -38,7 +39,8 @@ TRANSITION_ACTIONS = tuple(services.TRANSITIONS)
         ],
         description=(
             "Role bo‘yicha: Super Admin — hammasi; Teacher — biriktirilgan kurslar; "
-            "Student — faqat o‘ziga eligible (DRAFT/CANCELLED yashirin) va o‘z statistikasi bilan"
+            "Student — faqat o‘ziga eligible (DRAFT/CANCELLED yashirin) va o‘z "
+            "statistikasi bilan"
         ),
         responses={200: AssignmentSerializer(many=True)},
     ),
@@ -61,9 +63,8 @@ class AssignmentViewSet(
     mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
-
     filterset_class = AssignmentFilter
-    search_fields = ["exam__title"]
+    search_fields = ["exam__title", "exam__course__name"]
     ordering_fields = ["start_at", "end_at", "created_at"]
     ordering = ["-start_at"]
     lookup_value_regex = UUID_REGEX
@@ -77,7 +78,7 @@ class AssignmentViewSet(
         if self.action == "start":
             return [IsStudent()]
         role = (IsSuperAdmin | IsTeacher)()
-        if self.action == "create":
+        if self.action in ("create", "summary"):
             return [role]
         return [role, IsCreatorOrSuperAdmin()]
 
@@ -91,7 +92,10 @@ class AssignmentViewSet(
         user = self.request.user
         if user.role == UserRole.STUDENT:
             return selectors.student_assignments(user)
-        return selectors.staff_assignments(selectors.staff_visible(user))
+        qs = selectors.staff_visible(user)
+        if self.action == "list" and "scope" not in self.request.query_params:
+            qs = qs.filter(is_archived=False)
+        return selectors.staff_assignments(qs)
 
     def get_serializer_class(self):
         if self._is_student():
@@ -101,6 +105,16 @@ class AssignmentViewSet(
     def _detail(self, assignment_id) -> dict:
         assignment = selectors.staff_assignments(ExamAssignment.objects.all()).get(pk=assignment_id)
         return AssignmentDetailSerializer(assignment).data
+
+    @extend_schema(
+        tags=["exam-assignments"],
+        responses={200: AssignmentSummarySerializer},
+        description="Role doirasidagi arxivlanmagan assignment kartochka hisoblari.",
+    )
+    @action(detail=False, methods=["get"])
+    def summary(self, request):
+        data = selectors.assignment_directory_summary(request.user)
+        return Response(AssignmentSummarySerializer(data).data)
 
     # --- list / retrieve (student uchun lazy finalization) -------------
     def list(self, request, *args, **kwargs):
@@ -179,13 +193,29 @@ class AssignmentViewSet(
     def restore(self, request, pk=None):
         return self._transition("restore")
 
+    @extend_schema(
+        tags=["exam-assignments"], request=None, responses={200: AssignmentDetailSerializer}
+    )
+    @action(detail=True, methods=["post"])
+    def archive(self, request, pk=None):
+        assignment = services.archive_assignment(assignment=self.get_object())
+        return Response(self._detail(assignment.pk))
+
+    @extend_schema(
+        tags=["exam-assignments"], request=None, responses={200: AssignmentDetailSerializer}
+    )
+    @action(detail=True, methods=["post"])
+    def unarchive(self, request, pk=None):
+        assignment = services.unarchive_assignment(assignment=self.get_object())
+        return Response(self._detail(assignment.pk))
+
     # --- student: imtihonni boshlash ----------------------------------
     @extend_schema(
         tags=["exam-assignments"],
         request=None,
         description=(
-            "Yangi attempt boshlaydi: savollar (to‘g‘ri javobsiz), `deadline_at`, `server_now`. "
-            "Faol attempt bo‘lsa yoki limit tugagan bo‘lsa — 409."
+            "Yangi attempt boshlaydi: savollar (to‘g‘ri javobsiz), `deadline_at`, "
+            "`server_now`. Faol attempt bo‘lsa yoki limit tugagan bo‘lsa — 409."
         ),
         responses={201: StudentAttemptSerializer},
     )

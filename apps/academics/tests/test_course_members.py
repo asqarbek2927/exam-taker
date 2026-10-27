@@ -1,4 +1,5 @@
 import pytest
+from django.db import IntegrityError, transaction
 
 from apps.academics.choices import CourseTeacherType, EnrollmentStatus
 from apps.academics.models import CourseTeacher, Enrollment
@@ -6,6 +7,7 @@ from apps.academics.tests.factories import (
     CourseFactory,
     CourseTeacherFactory,
     EnrollmentFactory,
+    StudyGroupFactory,
 )
 from apps.users.choices import UserStatus
 from apps.users.tests.factories import StudentFactory, TeacherFactory
@@ -44,6 +46,31 @@ def test_assign_same_teacher_twice_returns_409(auth_client, admin):
     )
     assert response.status_code == 409
     assert response.json()["status_code"] == 409
+
+
+def test_cannot_assign_second_main_teacher(auth_client, admin):
+    existing = CourseTeacherFactory(type=CourseTeacherType.MAIN)
+    teacher = TeacherFactory()
+
+    response = auth_client(admin).post(
+        teachers_url(existing.course),
+        {"teacher_id": str(teacher.id), "type": "MAIN"},
+        format="json",
+    )
+
+    assert response.status_code == 409
+    assert response.json()["message"] == "Bu kursga MAIN teacher allaqachon biriktirilgan."
+    assert (
+        CourseTeacher.objects.filter(course=existing.course, type=CourseTeacherType.MAIN).count()
+        == 1
+    )
+
+
+def test_database_rejects_second_main_teacher():
+    existing = CourseTeacherFactory(type=CourseTeacherType.MAIN)
+
+    with pytest.raises(IntegrityError), transaction.atomic():
+        CourseTeacherFactory(course=existing.course, type=CourseTeacherType.MAIN)
 
 
 def test_cannot_assign_non_teacher(auth_client, admin, student):
@@ -85,6 +112,31 @@ def test_change_teacher_type_and_remove(auth_client, admin):
 
     assert client.delete(url).status_code == 204
     assert not CourseTeacher.objects.filter(pk=ct.pk).exists()
+
+
+def test_cannot_remove_teacher_used_by_group(auth_client, admin):
+    course = CourseFactory()
+    assignment = CourseTeacherFactory(course=course)
+    StudyGroupFactory(course=course, main_teacher=assignment.teacher)
+
+    response = auth_client(admin).delete(f"{teachers_url(course)}/{assignment.id}")
+
+    assert response.status_code == 409
+    assert CourseTeacher.objects.filter(pk=assignment.pk).exists()
+
+
+def test_cannot_change_second_teacher_to_main(auth_client, admin):
+    course = CourseFactory()
+    CourseTeacherFactory(course=course, type=CourseTeacherType.MAIN)
+    support = CourseTeacherFactory(course=course, type=CourseTeacherType.SUPPORT)
+
+    response = auth_client(admin).patch(
+        f"{teachers_url(course)}/{support.id}", {"type": "MAIN"}, format="json"
+    )
+
+    assert response.status_code == 409
+    support.refresh_from_db()
+    assert support.type == CourseTeacherType.SUPPORT
 
 
 def test_teacher_cannot_touch_another_courses_assignment(auth_client, admin):

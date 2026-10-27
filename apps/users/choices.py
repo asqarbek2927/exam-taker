@@ -12,6 +12,12 @@ class UserStatus(models.TextChoices):
     INACTIVE = "INACTIVE", "Inactive"
 
 
+class UserLanguage(models.TextChoices):
+    ENGLISH = "en", "English"
+    UZBEK = "uz", "O‘zbekcha"
+    RUSSIAN = "ru", "Русский"
+
+
 class CreatableUserRole(models.TextChoices):
     """API orqali yaratish mumkin bo‘lgan rollar (SUPER_ADMIN — faqat `createsuperuser`)."""
 

@@ -14,7 +14,7 @@ from apps.academics.tests.factories import (
     StudyGroupFactory,
 )
 from apps.assignments.choices import AssignmentStatus, AudienceType
-from apps.assignments.models import ExamAssignment
+from apps.assignments.models import ExamAssignment, ExamAssignmentRecipient
 from apps.assignments.selectors import (
     effective_status_of,
     eligible_students,
@@ -24,6 +24,7 @@ from apps.assignments.selectors import (
 from apps.assignments.tests.factories import AssignmentFactory, add_groups, add_students
 from apps.exams.choices import ExamStatus
 from apps.exams.tests.factories import ExamFactory, ExamQuestionFactory
+from apps.notifications.models import Notification
 from apps.users.choices import UserStatus
 from apps.users.tests.factories import StudentFactory, TeacherFactory
 
@@ -88,6 +89,17 @@ def test_create_for_all_course_students(auth_client, ctx):
     assert body["max_attempts"] == 2 and body["duration_minutes"] == 30
     assert body["attempts_count"] == 0
     assert body["eligible_students_count"] == 2
+    assignment = ExamAssignment.objects.get(pk=body["id"])
+    assert set(
+        ExamAssignmentRecipient.objects.filter(assignment=assignment).values_list(
+            "student_id", flat=True
+        )
+    ) == {ctx["in_group"].id, ctx["outside"].id}
+    notifications = Notification.objects.filter(
+        recipient_id__in=[ctx["in_group"].id, ctx["outside"].id]
+    )
+    assert notifications.count() == 2
+    assert {item.data["assignment_id"] for item in notifications} == {str(assignment.id)}
 
 
 def test_create_for_groups_and_specific_students(auth_client, ctx):
@@ -286,7 +298,7 @@ def test_list_filters_by_effective_status(auth_client, admin):
 
 def test_list_other_filters_and_scoping(auth_client, ctx):
     mine = AssignmentFactory(exam=ctx["exam"], published_by=ctx["teacher"], ensure_question=False)
-    colleague = CourseTeacherFactory(course=ctx["course"]).teacher
+    colleague = CourseTeacherFactory(course=ctx["course"], type="SUPPORT").teacher
     theirs = AssignmentFactory(exam=ctx["exam"], published_by=colleague, ensure_question=False)
     foreign = AssignmentFactory()
     client = auth_client(ctx["teacher"])
@@ -296,6 +308,92 @@ def test_list_other_filters_and_scoping(auth_client, ctx):
     assert client.get(f"{URL}/{foreign.id}").status_code == 404
     assert {a["id"] for a in client.get(URL, {"exam_id": ctx["exam"].id}).json()["data"]} == ids
     assert client.get(URL, {"course_id": foreign.exam.course_id}).json()["data"] == []
+
+
+def test_assignment_directory_summary_is_role_scoped_and_ignores_archived(
+        auth_client, admin, ctx
+):
+    now = timezone.now()
+    mine = {
+        "exam": ctx["exam"],
+        "published_by": ctx["teacher"],
+        "ensure_question": False,
+    }
+    AssignmentFactory(**mine)
+    AssignmentFactory(start_at=now + timedelta(days=1), end_at=None, **mine)
+    AssignmentFactory(status=AssignmentStatus.PAUSED, **mine)
+    AssignmentFactory(status=AssignmentStatus.DRAFT, **mine)
+    AssignmentFactory(status=AssignmentStatus.CANCELLED, is_archived=True, **mine)
+    foreign = AssignmentFactory()
+
+    teacher_summary = auth_client(ctx["teacher"]).get(f"{URL}/summary")
+    assert teacher_summary.status_code == 200
+    assert teacher_summary.json() == {
+        "assignments": 4,
+        "active": 1,
+        "scheduled": 1,
+        "paused": 1,
+    }
+
+    admin_summary = auth_client(admin).get(f"{URL}/summary").json()
+    assert admin_summary["assignments"] == 5
+    assert admin_summary["active"] == 2
+    assert str(foreign.id) in {a["id"] for a in auth_client(admin).get(URL).json()["data"]}
+    assert auth_client(ctx["outside"]).get(f"{URL}/summary").status_code == 403
+
+
+def test_assignment_directory_scope_archive_and_course_search(auth_client, ctx):
+    current = AssignmentFactory(
+        exam=ctx["exam"], published_by=ctx["teacher"], ensure_question=False
+    )
+    archived = AssignmentFactory(
+        exam=ctx["exam"],
+        published_by=ctx["teacher"],
+        status=AssignmentStatus.CANCELLED,
+        is_archived=True,
+        archived_at=timezone.now(),
+        ensure_question=False,
+    )
+    client = auth_client(ctx["teacher"])
+
+    assert {a["id"] for a in client.get(URL).json()["data"]} == {str(current.id)}
+    archived_data = client.get(URL, {"scope": "archived"}).json()["data"]
+    assert {a["id"] for a in archived_data} == {str(archived.id)}
+    assert archived_data[0]["is_archived"] is True
+    assert {a["id"] for a in client.get(URL, {"scope": "all"}).json()["data"]} == {
+        str(current.id),
+        str(archived.id),
+    }
+    assert {a["id"] for a in client.get(URL, {"search": ctx["course"].name}).json()["data"]} == {
+        str(current.id)
+    }
+
+
+def test_archive_and_unarchive_assignment(auth_client, ctx):
+    completed = AssignmentFactory(
+        exam=ctx["exam"],
+        published_by=ctx["teacher"],
+        status=AssignmentStatus.COMPLETED,
+        ensure_question=False,
+    )
+    active = AssignmentFactory(
+        exam=ctx["exam"], published_by=ctx["teacher"], ensure_question=False
+    )
+    client = auth_client(ctx["teacher"])
+
+    archived = client.post(f"{URL}/{completed.id}/archive")
+    assert archived.status_code == 200
+    assert archived.json()["is_archived"] is True
+    assert archived.json()["archived_at"] is not None
+    assert client.patch(
+        f"{URL}/{completed.id}", {"duration_minutes": 10}, format="json"
+    ).status_code == 400
+    assert client.post(f"{URL}/{active.id}/archive").status_code == 400
+
+    restored = client.post(f"{URL}/{completed.id}/unarchive")
+    assert restored.status_code == 200
+    assert restored.json()["is_archived"] is False
+    assert restored.json()["archived_at"] is None
 
 
 def test_list_has_no_n_plus_one(auth_client, admin, django_assert_max_num_queries):
@@ -344,6 +442,10 @@ def test_cancelled_cannot_jump_to_active_only_via_restore_and_publish(auth_clien
     assert client.post(f"{URL}/{assignment.id}/publish").status_code == 409
     assert client.post(f"{URL}/{assignment.id}/restore").json()["status"] == "DRAFT"
     assert client.post(f"{URL}/{assignment.id}/publish").json()["status"] == "ACTIVE"
+    assert set(assignment.recipients.values_list("student_id", flat=True)) == {
+        ctx["in_group"].id,
+        ctx["outside"].id,
+    }
 
 
 def test_publish_requires_ready_exam_and_future_deadline(auth_client, ctx):
@@ -367,7 +469,7 @@ def test_only_publisher_or_admin_can_modify(auth_client, admin, ctx):
     assignment = AssignmentFactory(
         exam=ctx["exam"], published_by=ctx["teacher"], ensure_question=False
     )
-    colleague = CourseTeacherFactory(course=ctx["course"]).teacher
+    colleague = CourseTeacherFactory(course=ctx["course"], type="SUPPORT").teacher
     client = auth_client(colleague)
     url = f"{URL}/{assignment.id}"
 
@@ -448,17 +550,17 @@ def test_assignment_with_attempts_only_allows_extending_end_at(auth_client, ctx)
     assert client.patch(url, {"duration_minutes": 5}, format="json").status_code == 409
     assert client.patch(url, {"max_attempts": 9}, format="json").status_code == 409
     assert (
-        client.patch(url, {"audience_type": "ALL_COURSE_STUDENTS"}, format="json").status_code
-        == 409
+            client.patch(url, {"audience_type": "ALL_COURSE_STUDENTS"}, format="json").status_code
+            == 409
     )
     assert (
-        client.patch(url, {"end_at": iso(timedelta(hours=3))}, format="json").status_code == 409
+            client.patch(url, {"end_at": iso(timedelta(hours=3))}, format="json").status_code == 409
     )  # qisqartirish
 
     extended = client.patch(url, {"end_at": iso(timedelta(days=3))}, format="json")
     assert extended.status_code == 200
     assert (
-        client.patch(url, {"end_at": None}, format="json").status_code == 200
+            client.patch(url, {"end_at": None}, format="json").status_code == 200
     )  # deadline olib tashlandi
 
 
@@ -510,7 +612,8 @@ def test_student_dto_and_can_start_flags(auth_client, ctx):
     assert dto["attempts_used"] == 0 and dto["attempts_remaining"] == 1
     assert data[str(paused.id)]["status"] == "PAUSED" and data[str(paused.id)]["can_start"] is False
     assert (
-        data[str(future.id)]["status"] == "SCHEDULED" and data[str(future.id)]["can_start"] is False
+        data[str(future.id)]["status"] == "SCHEDULED"
+        and data[str(future.id)]["can_start"] is False
     )
     assert data[str(future.id)]["attempts_remaining"] == 2
 

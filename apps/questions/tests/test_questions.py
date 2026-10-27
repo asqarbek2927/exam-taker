@@ -47,20 +47,20 @@ def payload(ctx, **overrides):
     [
         ("SINGLE_CHOICE", TWO_OPTIONS, 2),
         (
-            "MULTIPLE_CHOICE",
-            [{"text": "A", "is_correct": True}, {"text": "B", "is_correct": True}],
-            3,
+                "MULTIPLE_CHOICE",
+                [{"text": "A", "is_correct": True}, {"text": "B", "is_correct": True}],
+                3,
         ),
         (
-            "TRUE_FALSE",
-            [{"text": "True", "is_correct": False}, {"text": "False", "is_correct": True}],
-            1,
+                "TRUE_FALSE",
+                [{"text": "True", "is_correct": False}, {"text": "False", "is_correct": True}],
+                1,
         ),
         ("OPEN_ENDED", [], 5),
     ],
 )
 def test_create_each_type_uses_default_points(
-    auth_client, ctx, question_type, options, expected_points
+        auth_client, ctx, question_type, options, expected_points
 ):
     response = auth_client(ctx["teacher"]).post(
         QUESTIONS, payload(ctx, type=question_type, options=options), format="json"
@@ -146,9 +146,8 @@ def test_create_rejects_archived_module(auth_client, ctx):
 def test_create_rejects_archived_course(auth_client, ctx):
     ctx["course"].status = CourseStatus.ARCHIVED
     ctx["course"].save()
-    assert (
-        auth_client(ctx["teacher"]).post(QUESTIONS, payload(ctx), format="json").status_code == 400
-    )
+    response = auth_client(ctx["teacher"]).post(QUESTIONS, payload(ctx), format="json")
+    assert response.status_code == 400
 
 
 def test_unassigned_teacher_cannot_create_in_course(auth_client, ctx):
@@ -286,8 +285,8 @@ def test_question_in_published_exam_is_locked(auth_client, ctx):
     response = client.patch(f"{QUESTIONS}/{locked.id}", {"text": "Changed"}, format="json")
     assert response.status_code == 409
     assert (
-        client.patch(f"{QUESTIONS}/{free.id}", {"text": "Changed"}, format="json").status_code
-        == 200
+            client.patch(f"{QUESTIONS}/{free.id}", {"text": "Changed"}, format="json").status_code
+            == 200
     )
 
 
@@ -336,6 +335,28 @@ def test_archive_endpoint_is_idempotent(auth_client, ctx):
         assert response.json()["status"] == "ARCHIVED"
 
 
+def test_restore_endpoint_is_idempotent_and_validates_parent_state(auth_client, ctx):
+    question = QuestionFactory(
+        course=ctx["course"],
+        module=ctx["module"],
+        created_by=ctx["teacher"],
+        status=QuestionStatus.ARCHIVED,
+    )
+    client = auth_client(ctx["teacher"])
+    url = f"{QUESTIONS}/{question.id}/restore"
+
+    for _ in range(2):
+        response = client.post(url)
+        assert response.status_code == 200
+        assert response.json()["status"] == "ACTIVE"
+
+    question.status = QuestionStatus.ARCHIVED
+    question.save(update_fields=["status"])
+    ctx["module"].status = ModuleStatus.ARCHIVED
+    ctx["module"].save(update_fields=["status"])
+    assert client.post(url).status_code == 400
+
+
 # ---------------------------- list / filters ----------------------------
 def test_list_hides_archived_by_default(auth_client, ctx):
     active = QuestionFactory(course=ctx["course"], module=ctx["module"])
@@ -345,6 +366,40 @@ def test_list_hides_archived_by_default(auth_client, ctx):
     assert [q["id"] for q in client.get(QUESTIONS).json()["data"]] == [str(active.id)]
     archived = client.get(QUESTIONS, {"status": "ARCHIVED"}).json()["data"]
     assert len(archived) == 1 and archived[0]["status"] == "ARCHIVED"
+
+
+def test_question_bank_summary_is_role_scoped(auth_client, admin, ctx):
+    common = {"course": ctx["course"], "module": ctx["module"]}
+    QuestionFactory(type=QuestionType.SINGLE_CHOICE, **common)
+    QuestionFactory(type=QuestionType.MULTIPLE_CHOICE, **common)
+    QuestionFactory(type=QuestionType.TRUE_FALSE, **common)
+    QuestionFactory(type=QuestionType.OPEN_ENDED, **common)
+    QuestionFactory(status=QuestionStatus.ARCHIVED, **common)
+    QuestionFactory()
+
+    response = auth_client(ctx["teacher"]).get(f"{QUESTIONS}/summary")
+    assert response.status_code == 200
+    assert response.json() == {
+        "active_questions": 4,
+        "choice_questions": 2,
+        "open_ended": 1,
+        "archived": 1,
+    }
+    assert auth_client(admin).get(f"{QUESTIONS}/summary").json()["active_questions"] == 5
+
+
+def test_list_includes_course_and_module_details(auth_client, ctx):
+    question = QuestionFactory(course=ctx["course"], module=ctx["module"])
+    item = auth_client(ctx["teacher"]).get(QUESTIONS).json()["data"][0]
+
+    assert item["id"] == str(question.id)
+    assert item["course"] == {
+        "id": str(ctx["course"].id),
+        "name": ctx["course"].name,
+        "status": ctx["course"].status,
+    }
+    assert item["module"]["id"] == str(ctx["module"].id)
+    assert item["module"]["title"] == ctx["module"].title
 
 
 def test_list_filters(auth_client, admin, ctx):

@@ -230,15 +230,50 @@ def test_list_has_totals_and_hides_archived(auth_client, ctx):
     data = client.get(EXAMS).json()["data"]
     assert [e["id"] for e in data] == [str(exam.id)]
     assert data[0]["questions_count"] == 3
+    assert data[0]["modules_count"] == 2
     assert data[0]["total_points"] == 6  # 2 + 3 + 1
+    assert data[0]["uses_count"] == 0
     assert "questions" not in data[0]
 
     archived = client.get(EXAMS, {"status": "ARCHIVED"}).json()["data"]
     assert len(archived) == 1
 
 
+def test_exam_list_counts_assignment_uses_without_distorting_totals(auth_client, ctx):
+    exam = make_exam(ctx, status=ExamStatus.READY)
+    AssignmentFactory.create_batch(2, exam=exam, ensure_question=False)
+
+    body = auth_client(ctx["teacher"]).get(EXAMS).json()["data"][0]
+
+    assert body["modules_count"] == 2
+    assert body["questions_count"] == 3
+    assert body["total_points"] == 6
+    assert body["uses_count"] == 2
+
+
+def test_exam_library_summary_is_role_scoped(auth_client, admin, student, ctx):
+    ExamFactory(course=ctx["course"], created_by=ctx["teacher"], status=ExamStatus.DRAFT)
+    ExamFactory(course=ctx["course"], created_by=ctx["teacher"], status=ExamStatus.READY)
+    ExamFactory(course=ctx["course"], created_by=ctx["teacher"], status=ExamStatus.ARCHIVED)
+    ExamFactory()  # teacherga ko‘rinmaydigan boshqa kurs imtihoni
+
+    teacher_summary = auth_client(ctx["teacher"]).get(f"{EXAMS}/summary")
+    assert teacher_summary.status_code == 200
+    assert teacher_summary.json() == {
+        "total_exams": 3,
+        "draft_exams": 1,
+        "ready_exams": 1,
+        "archived_exams": 1,
+    }
+
+    admin_summary = auth_client(admin).get(f"{EXAMS}/summary")
+    assert admin_summary.status_code == 200
+    assert admin_summary.json()["total_exams"] == 4
+    assert auth_client(student).get(f"{EXAMS}/summary").status_code == 403
+
+
 def test_teacher_sees_exams_of_assigned_courses_including_colleagues(auth_client, ctx):
-    colleague = CourseTeacherFactory(course=ctx["course"]).teacher
+    colleague = CourseTeacherFactory(course=ctx["course"], type="SUPPORT").teacher
     theirs = ExamFactory(course=ctx["course"], created_by=colleague)
     foreign = ExamFactory()
     client = auth_client(ctx["teacher"])
@@ -398,7 +433,7 @@ def test_update_keeps_working_after_a_used_question_gets_archived(auth_client, c
 
 def test_only_author_or_admin_can_modify(auth_client, admin, ctx):
     exam = make_exam(ctx)
-    colleague = CourseTeacherFactory(course=ctx["course"]).teacher
+    colleague = CourseTeacherFactory(course=ctx["course"], type="SUPPORT").teacher
     client = auth_client(colleague)
     url = f"{EXAMS}/{exam.id}"
 
@@ -438,7 +473,7 @@ def test_published_exam_content_is_locked(auth_client, ctx):
 # ---------------------------- duplicate ----------------------------
 def test_duplicate_creates_independent_draft_owned_by_caller(auth_client, ctx):
     exam = make_exam(ctx, status=ExamStatus.READY)
-    colleague = CourseTeacherFactory(course=ctx["course"]).teacher
+    colleague = CourseTeacherFactory(course=ctx["course"], type="SUPPORT").teacher
 
     response = auth_client(colleague).post(f"{EXAMS}/{exam.id}/duplicate")
     assert response.status_code == 201

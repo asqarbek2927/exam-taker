@@ -100,6 +100,17 @@ def staff_assignments(qs: QuerySet[ExamAssignment], now: datetime | None = None)
     )
 
 
+def assignment_directory_summary(user, now: datetime | None = None) -> dict[str, int]:
+    """Staff assignment katalogining joriy (arxivlanmagan) kartochka hisoblari."""
+    qs = with_effective_status(staff_visible(user).filter(is_archived=False), now)
+    return qs.aggregate(
+        assignments=Count("pk"),
+        active=Count("pk", filter=Q(effective_status=EffectiveStatus.ACTIVE)),
+        scheduled=Count("pk", filter=Q(effective_status=EffectiveStatus.SCHEDULED)),
+        paused=Count("pk", filter=Q(effective_status=EffectiveStatus.PAUSED)),
+    )
+
+
 # --------------------------------------------------------------------------
 # Eligibility (TZ 10.2) — yagona joy
 # --------------------------------------------------------------------------
@@ -140,14 +151,15 @@ def student_assignments(student: User, now: datetime | None = None):
     specific = ExamAssignmentStudent.objects.filter(assignment=OuterRef("pk"), student=student)
 
     audience = (
-        Q(audience_type=AudienceType.ALL_COURSE_STUDENTS)
-        | (Q(audience_type=AudienceType.GROUPS) & Q(Exists(in_group)))
-        | (Q(audience_type=AudienceType.SPECIFIC_STUDENTS) & Q(Exists(specific)))
+            Q(audience_type=AudienceType.ALL_COURSE_STUDENTS)
+            | (Q(audience_type=AudienceType.GROUPS) & Q(Exists(in_group)))
+            | (Q(audience_type=AudienceType.SPECIFIC_STUDENTS) & Q(Exists(specific)))
     )
     own_attempts = ExamAttempt.objects.filter(assignment=OuterRef("pk"), student=student)
 
     qs = (
         ExamAssignment.objects.filter(
+            is_archived=False,
             status__in=[
                 AssignmentStatus.PUBLISHED,
                 AssignmentStatus.PAUSED,
@@ -206,6 +218,7 @@ def assignment_has_attempts(assignment: ExamAssignment) -> bool:
 
 
 __all__ = [
+    "assignment_directory_summary",
     "assignment_has_attempts",
     "effective_status_expr",
     "effective_status_of",

@@ -6,3 +6,8 @@ class AttemptStatus(models.TextChoices):
     SUBMITTED = "SUBMITTED", "Submitted"
     PENDING_GRADING = "PENDING_GRADING", "Pending grading"
     GRADED = "GRADED", "Graded"
+
+
+class FinalizationReason(models.TextChoices):
+    USER_SUBMIT = "USER_SUBMIT", "User submit"
+    TIMEOUT = "TIMEOUT", "Timeout"

@@ -23,9 +23,25 @@ class QuestionOptionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class QuestionCourseBriefSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Course
+        fields = ["id", "name", "status"]
+        read_only_fields = fields
+
+
+class QuestionModuleBriefSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Module
+        fields = ["id", "title", "position", "status"]
+        read_only_fields = fields
+
+
 class QuestionListSerializer(serializers.ModelSerializer):
     course_id = serializers.UUIDField(read_only=True)
     module_id = serializers.UUIDField(read_only=True)
+    course = QuestionCourseBriefSerializer(read_only=True)
+    module = QuestionModuleBriefSerializer(read_only=True)
     created_by = UserBriefSerializer(read_only=True)
 
     class Meta:
@@ -34,6 +50,8 @@ class QuestionListSerializer(serializers.ModelSerializer):
             "id",
             "course_id",
             "module_id",
+            "course",
+            "module",
             "type",
             "text",
             "default_points",
@@ -43,6 +61,13 @@ class QuestionListSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+
+class QuestionBankSummarySerializer(serializers.Serializer):
+    active_questions = serializers.IntegerField()
+    choice_questions = serializers.IntegerField()
+    open_ended = serializers.IntegerField()
+    archived = serializers.IntegerField()
 
 
 class QuestionDetailSerializer(QuestionListSerializer):

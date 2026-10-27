@@ -3,7 +3,7 @@ from django.db import models
 
 from common.models import TimeStampedModel, UUIDModel
 
-from .choices import CourseStatus, CourseTeacherType, EnrollmentStatus, ModuleStatus
+from .choices import CourseStatus, CourseTeacherType, EnrollmentStatus, GroupStatus, ModuleStatus
 
 
 class Course(UUIDModel, TimeStampedModel):
@@ -34,6 +34,11 @@ class CourseTeacher(UUIDModel):
         ordering = ["type", "assigned_at"]  # MAIN < SUPPORT
         constraints = [
             models.UniqueConstraint(fields=["course", "teacher"], name="uniq_course_teacher"),
+            models.UniqueConstraint(
+                fields=["course"],
+                condition=models.Q(type=CourseTeacherType.MAIN),
+                name="uniq_main_teacher_per_course",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -69,12 +74,37 @@ class StudyGroup(UUIDModel, TimeStampedModel):
 
     course = models.ForeignKey(Course, on_delete=models.PROTECT, related_name="groups")
     name = models.CharField(max_length=255)
+    status = models.CharField(
+        max_length=10, choices=GroupStatus.choices, default=GroupStatus.ACTIVE, db_index=True
+    )
+    main_teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="main_study_groups",
+        null=True,
+        blank=True,
+    )
+    support_teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="support_study_groups",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         db_table = "study_groups"
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(fields=["course", "name"], name="uniq_group_name_per_course"),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(main_teacher__isnull=True)
+                    | models.Q(support_teacher__isnull=True)
+                    | ~models.Q(main_teacher=models.F("support_teacher"))
+                ),
+                name="group_teachers_must_differ",
+            ),
         ]
 
     def __str__(self) -> str:

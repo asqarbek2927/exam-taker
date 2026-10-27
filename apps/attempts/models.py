@@ -3,7 +3,7 @@ from django.db import models
 
 from common.models import TimeStampedModel, UUIDModel
 
-from .choices import AttemptStatus
+from .choices import AttemptStatus, FinalizationReason
 
 
 class ExamAttempt(UUIDModel, TimeStampedModel):
@@ -18,6 +18,9 @@ class ExamAttempt(UUIDModel, TimeStampedModel):
     # min(started_at + duration, assignment.end_at) — boshlanganda hisoblanib saqlanadi (TZ 10.5).
     deadline_at = models.DateTimeField()
     submitted_at = models.DateTimeField(null=True, blank=True)
+    finalization_reason = models.CharField(
+        max_length=20, choices=FinalizationReason.choices, null=True, blank=True, db_index=True
+    )
     status = models.CharField(
         max_length=20, choices=AttemptStatus.choices, default=AttemptStatus.IN_PROGRESS
     )

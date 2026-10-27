@@ -1,10 +1,16 @@
 import pytest
 
-from apps.academics.choices import CourseStatus, CourseTeacherType, EnrollmentStatus
+from apps.academics.choices import (
+    CourseStatus,
+    CourseTeacherType,
+    EnrollmentStatus,
+    ModuleStatus,
+)
 from apps.academics.tests.factories import (
     CourseFactory,
     CourseTeacherFactory,
     EnrollmentFactory,
+    ModuleFactory,
 )
 from apps.users.tests.factories import StudentFactory, TeacherFactory
 
@@ -37,6 +43,22 @@ def test_create_course_validation(auth_client, admin):
     assert "name" in response.json()["errors"]
 
 
+def test_admin_can_create_draft_and_activate_course(auth_client, admin):
+    client = auth_client(admin)
+    created = client.post(COURSES, {"name": "Draft course", "status": "DRAFT"}, format="json")
+    assert created.status_code == 201
+    assert created.json()["status"] == "DRAFT"
+
+    activated = client.patch(
+        f"{COURSES}/{created.json()['id']}", {"status": "ACTIVE"}, format="json"
+    )
+    assert activated.status_code == 200
+    assert activated.json()["status"] == "ACTIVE"
+
+    invalid = client.post(COURSES, {"name": "No", "status": "ARCHIVED"}, format="json")
+    assert invalid.status_code == 422
+
+
 @pytest.mark.parametrize("role_fixture", ["teacher", "student"])
 def test_non_admin_cannot_write_courses(request, auth_client, role_fixture):
     client = auth_client(request.getfixturevalue(role_fixture))
@@ -44,6 +66,7 @@ def test_non_admin_cannot_write_courses(request, auth_client, role_fixture):
     assert client.post(COURSES, {"name": "X"}, format="json").status_code == 403
     assert client.patch(f"{COURSES}/{course.id}", {"name": "Y"}, format="json").status_code == 403
     assert client.post(f"{COURSES}/{course.id}/archive").status_code == 403
+    assert client.post(f"{COURSES}/{course.id}/restore").status_code == 403
 
 
 def test_anonymous_cannot_list_courses(api_client):
@@ -109,6 +132,21 @@ def test_course_detail_has_main_and_support_teachers(auth_client, admin):
     assert [t["id"] for t in body["support_teachers"]] == [str(support.id)]
 
 
+def test_course_list_includes_teachers_and_filters_by_teacher(auth_client, admin):
+    teacher = TeacherFactory()
+    mine = CourseFactory(name="Mine")
+    other = CourseFactory(name="Other")
+    CourseTeacherFactory(course=mine, teacher=teacher)
+    CourseTeacherFactory(course=other)
+
+    response = auth_client(admin).get(COURSES, {"teacher_id": str(teacher.id)})
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert [course["id"] for course in data] == [str(mine.id)]
+    assert data[0]["teachers"][0]["id"] == str(teacher.id)
+
+
 def test_course_list_filter_and_search(auth_client, admin):
     CourseFactory(name="Python Foundation")
     CourseFactory(name="Django Backend", status=CourseStatus.ARCHIVED)
@@ -150,3 +188,46 @@ def test_archive_course_makes_it_read_only(auth_client, admin):
 def test_archive_is_idempotent(auth_client, admin):
     course = CourseFactory(status=CourseStatus.ARCHIVED)
     assert auth_client(admin).post(f"{COURSES}/{course.id}/archive").status_code == 200
+
+
+def test_restore_archived_course_is_idempotent(auth_client, admin):
+    course = CourseFactory(status=CourseStatus.ARCHIVED)
+    client = auth_client(admin)
+
+    first = client.post(f"{COURSES}/{course.id}/restore")
+    second = client.post(f"{COURSES}/{course.id}/restore")
+
+    assert first.status_code == 200
+    assert first.json()["status"] == "ACTIVE"
+    assert second.status_code == 200
+    assert second.json()["status"] == "ACTIVE"
+
+
+def test_course_catalog_summary(auth_client, admin):
+    active = CourseFactory(status=CourseStatus.ACTIVE)
+    draft = CourseFactory(status=CourseStatus.DRAFT)
+    archived = CourseFactory(status=CourseStatus.ARCHIVED)
+    ModuleFactory.create_batch(2, course=active)
+    ModuleFactory(course=draft)
+    ModuleFactory(course=active, status=ModuleStatus.ARCHIVED)
+    ModuleFactory(course=archived)
+    EnrollmentFactory.create_batch(2, course=active)
+    EnrollmentFactory(course=draft)
+    EnrollmentFactory(course=active, status=EnrollmentStatus.REMOVED)
+    EnrollmentFactory(course=archived)
+
+    response = auth_client(admin).get(f"{COURSES}/summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "total_courses": 3,
+        "active_courses": 1,
+        "draft_courses": 1,
+        "archived_courses": 1,
+        "learning_modules": 3,
+        "course_enrollments": 3,
+    }
+
+
+def test_course_catalog_summary_forbidden_for_non_admin(auth_client, teacher):
+    assert auth_client(teacher).get(f"{COURSES}/summary").status_code == 403

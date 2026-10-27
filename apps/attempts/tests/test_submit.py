@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 from django.utils import timezone
 
-from apps.attempts.choices import AttemptStatus
+from apps.attempts.choices import AttemptStatus, FinalizationReason
 from apps.attempts.models import ExamAttempt, StudentAnswer
 from apps.attempts.tests.conftest import option_id
 from apps.attempts.tests.test_start import contains_key
@@ -42,6 +42,9 @@ def test_perfect_objective_attempt_is_graded_and_passed(api, make_world):
     assert body["status"] == "GRADED"
     assert body["score"] == 6 and body["percentage"] == 100 and body["passed"] is True
     assert body["submitted_at"] is not None
+    assert (
+        ExamAttempt.objects.get(pk=attempt_id).finalization_reason == FinalizationReason.USER_SUBMIT
+    )
     assert set(body) == {
         "id", "assignment_id", "exam_id", "exam_title", "attempt_number", "status",
         "started_at", "submitted_at", "score", "percentage", "passed",
@@ -176,6 +179,7 @@ def test_submit_after_deadline_uses_only_saved_answers(api, world):
     body = client.submit(attempt_id).json()
     attempt = ExamAttempt.objects.get(pk=attempt_id)
     assert attempt.submitted_at == deadline  # kechikkan paytga emas, deadline ga yoziladi
+    assert attempt.finalization_reason == FinalizationReason.TIMEOUT
     assert body["status"] == "GRADED"
     assert body["score"] == 2
 
@@ -187,7 +191,9 @@ def test_submit_within_grace_is_regular_submit(api, world):
     )
     before = timezone.now()
     client.submit(attempt_id)
-    assert ExamAttempt.objects.get(pk=attempt_id).submitted_at >= before
+    attempt = ExamAttempt.objects.get(pk=attempt_id)
+    assert attempt.submitted_at >= before
+    assert attempt.finalization_reason == FinalizationReason.USER_SUBMIT
 
 
 def test_student_views_after_submit_do_not_leak_answers(api, world):

@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.academics.choices import GroupStatus
 from apps.academics.models import StudyGroup
 from apps.exams.models import Exam
 from apps.exams.serializers import CourseBriefSerializer
@@ -75,6 +76,8 @@ class AssignmentSerializer(serializers.ModelSerializer):
             "status",
             "stored_status",
             "attempts_count",
+            "is_archived",
+            "archived_at",
             "created_at",
             "updated_at",
         ]
@@ -90,6 +93,13 @@ class AssignmentDetailSerializer(AssignmentSerializer):
 
     def get_eligible_students_count(self, obj: ExamAssignment) -> int:
         return eligible_students(obj).count()
+
+
+class AssignmentSummarySerializer(serializers.Serializer):
+    assignments = serializers.IntegerField()
+    active = serializers.IntegerField()
+    scheduled = serializers.IntegerField()
+    paused = serializers.IntegerField()
 
 
 # --------------------------------------------------------------------------
@@ -138,9 +148,9 @@ class StudentAssignmentSerializer(serializers.ModelSerializer):
     def get_can_start(self, obj) -> bool:
         remaining = self.get_attempts_remaining(obj)
         return (
-            obj.effective_status == EffectiveStatus.ACTIVE
-            and obj.active_attempt_id is None
-            and (remaining is None or remaining > 0)
+                obj.effective_status == EffectiveStatus.ACTIVE
+                and obj.active_attempt_id is None
+                and (remaining is None or remaining > 0)
         )
 
 
@@ -175,7 +185,10 @@ class AssignmentCreateSerializer(_AudienceMixin, serializers.Serializer):
     exam_id = UUIDRelatedField(queryset=Exam.objects.all(), source="exam")
     audience_type = serializers.ChoiceField(choices=AudienceType.choices)
     group_ids = UUIDRelatedField(
-        queryset=StudyGroup.objects.all(), many=True, source="groups", required=False
+        queryset=StudyGroup.objects.filter(status=GroupStatus.ACTIVE),
+        many=True,
+        source="groups",
+        required=False,
     )
     student_ids = UUIDRelatedField(
         queryset=User.objects.filter(role=UserRole.STUDENT),
@@ -205,7 +218,10 @@ class AssignmentUpdateSerializer(_AudienceMixin, serializers.Serializer):
 
     audience_type = serializers.ChoiceField(choices=AudienceType.choices, required=False)
     group_ids = UUIDRelatedField(
-        queryset=StudyGroup.objects.all(), many=True, source="groups", required=False
+        queryset=StudyGroup.objects.filter(status=GroupStatus.ACTIVE),
+        many=True,
+        source="groups",
+        required=False,
     )
     student_ids = UUIDRelatedField(
         queryset=User.objects.filter(role=UserRole.STUDENT),

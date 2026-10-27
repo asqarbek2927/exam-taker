@@ -57,6 +57,8 @@ class ExamListSerializer(serializers.ModelSerializer):
     course = CourseBriefSerializer(read_only=True)
     created_by = UserBriefSerializer(read_only=True)
     questions_count = serializers.IntegerField(read_only=True)
+    modules_count = serializers.IntegerField(read_only=True)
+    uses_count = serializers.IntegerField(read_only=True)
     total_points = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
@@ -70,11 +72,20 @@ class ExamListSerializer(serializers.ModelSerializer):
             "passing_score_percent",
             "status",
             "questions_count",
+            "modules_count",
             "total_points",
+            "uses_count",
             "created_at",
             "updated_at",
         ]
         read_only_fields = fields
+
+
+class ExamLibrarySummarySerializer(serializers.Serializer):
+    total_exams = serializers.IntegerField()
+    draft_exams = serializers.IntegerField()
+    ready_exams = serializers.IntegerField()
+    archived_exams = serializers.IntegerField()
 
 
 class ExamDetailSerializer(ExamListSerializer):

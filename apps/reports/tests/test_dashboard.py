@@ -3,7 +3,7 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from apps.academics.choices import CourseStatus, EnrollmentStatus, ModuleStatus
+from apps.academics.choices import CourseStatus, EnrollmentStatus, GroupStatus, ModuleStatus
 from apps.academics.tests.factories import (
     CourseFactory,
     CourseTeacherFactory,
@@ -12,11 +12,13 @@ from apps.academics.tests.factories import (
     StudyGroupFactory,
 )
 from apps.assignments.choices import AssignmentStatus
+from apps.assignments.models import ExamAssignmentRecipient
 from apps.assignments.tests.factories import AssignmentFactory
+from apps.attempts.choices import FinalizationReason
 from apps.attempts.tests.factories import AttemptFactory
 from apps.exams.choices import ExamStatus
-from apps.exams.tests.factories import ExamFactory
-from apps.questions.choices import QuestionStatus
+from apps.exams.tests.factories import ExamFactory, ExamQuestionFactory
+from apps.questions.choices import QuestionStatus, QuestionType
 from apps.questions.tests.factories import QuestionFactory
 from apps.users.choices import UserStatus
 from apps.users.tests.factories import StudentFactory, TeacherFactory
@@ -36,6 +38,7 @@ def graded(assignment, student, number, percentage, passed):
         score=percentage / 10,
         passed=passed,
         submitted_at=timezone.now(),
+        finalization_reason=FinalizationReason.USER_SUBMIT,
     )
 
 
@@ -53,7 +56,14 @@ def test_each_dashboard_is_role_specific(request, auth_client, api_client, url, 
 
 # ------------------------------- empty state -------------------------------
 def test_empty_state_returns_zeros_and_nulls(auth_client, admin, teacher, student):
-    assert auth_client(admin).get(ADMIN).json() == {
+    admin_body = auth_client(admin).get(ADMIN).json()
+    summary = admin_body.pop("summary")
+    recent_exams = admin_body.pop("recent_exams")
+    recent_results = admin_body.pop("recent_results")
+    activity = admin_body.pop("exam_activity")
+    exam_stats = admin_body.pop("exam_statistics")
+    platform_events = admin_body.pop("platform_activity")
+    assert admin_body == {
         "total_students": 1,
         "total_teachers": 1,
         "total_courses": 0,
@@ -64,7 +74,51 @@ def test_empty_state_returns_zeros_and_nulls(auth_client, admin, teacher, studen
         "completed_assignments": 0,
         "average_score": None,
         "pass_rate": None,
+        "question_statistics": {
+            "total_questions": 0,
+            "used_in_exams": 0,
+            "used_in_exams_percentage": 0.0,
+            "types": [
+                {"type": "SINGLE_CHOICE", "label": "Single choice", "count": 0, "percentage": 0.0},
+                {
+                    "type": "MULTIPLE_CHOICE",
+                    "label": "Multiple choice",
+                    "count": 0,
+                    "percentage": 0.0,
+                },
+                {"type": "TRUE_FALSE", "label": "True / False", "count": 0, "percentage": 0.0},
+                {"type": "OPEN_ENDED", "label": "Open ended", "count": 0, "percentage": 0.0},
+            ],
+        },
+        "course_overview": [],
     }
+    assert summary == {
+        "students": {"total": 1, "added_this_month": 1},
+        "teachers": {"total": 1, "added_this_month": 1},
+        "courses": {"total": 0, "active": 0},
+        "questions": {"total": 0, "added_this_month": 0},
+        "exams": {"total": 0, "active_assignments": 0},
+        "upcoming_assignments": {"next_7_days": 0},
+    }
+    assert recent_exams == [] and recent_results == []
+    assert activity["period_days"] == 7
+    assert len(activity["items"]) == 7
+    assert activity["current_total"] == activity["previous_total"] == 0
+    assert activity["change_percentage"] is None
+    assert exam_stats == {
+        "completed_attempts": 0,
+        "graded_attempts": 0,
+        "passed_attempts": 0,
+        "pass_rate": None,
+        "average_score": None,
+        "assigned_recipients": 0,
+        "completed_recipients": 0,
+        "completion_rate": None,
+        "tracked_submissions": 0,
+        "on_time_submissions": 0,
+        "on_time_submission_rate": None,
+    }
+    assert [event["type"] for event in platform_events] == ["TEACHER_JOINED"]
     assert auth_client(teacher).get(TEACHER).json() == {
         "my_courses": 0,
         "my_groups": 0,
@@ -144,6 +198,165 @@ def test_admin_score_stats_use_latest_graded_attempt_per_student_and_assignment(
     assert body["pass_rate"] == pytest.approx(66.67)
 
 
+def test_admin_question_statistics(auth_client, admin):
+    course = CourseFactory()
+    module = ModuleFactory(course=course)
+    author = TeacherFactory()
+    single_used = QuestionFactory(course=course, module=module, created_by=author)
+    QuestionFactory(course=course, module=module, created_by=author)
+    multiple_used = QuestionFactory(
+        course=course,
+        module=module,
+        created_by=author,
+        type=QuestionType.MULTIPLE_CHOICE,
+    )
+    true_false = QuestionFactory(
+        course=course, module=module, created_by=author, type=QuestionType.TRUE_FALSE
+    )
+    archived_question = QuestionFactory(
+        course=course,
+        module=module,
+        created_by=author,
+        type=QuestionType.OPEN_ENDED,
+        status=QuestionStatus.ARCHIVED,
+    )
+
+    first_exam = ExamFactory(course=course, created_by=author)
+    second_exam = ExamFactory(course=course, created_by=author)
+    archived_exam = ExamFactory(course=course, created_by=author, status=ExamStatus.ARCHIVED)
+    ExamQuestionFactory(exam=first_exam, question=single_used)
+    ExamQuestionFactory(exam=second_exam, question=single_used)  # bir marta sanaladi
+    ExamQuestionFactory(exam=first_exam, question=multiple_used)
+    ExamQuestionFactory(exam=archived_exam, question=true_false)  # ishlatilgan hisoblanmaydi
+    ExamQuestionFactory(exam=first_exam, question=archived_question)  # totalga kirmaydi
+
+    statistics = auth_client(admin).get(ADMIN).json()["question_statistics"]
+
+    assert statistics == {
+        "total_questions": 4,
+        "used_in_exams": 2,
+        "used_in_exams_percentage": 50.0,
+        "types": [
+            {
+                "type": "SINGLE_CHOICE",
+                "label": "Single choice",
+                "count": 2,
+                "percentage": 50.0,
+            },
+            {
+                "type": "MULTIPLE_CHOICE",
+                "label": "Multiple choice",
+                "count": 1,
+                "percentage": 25.0,
+            },
+            {
+                "type": "TRUE_FALSE",
+                "label": "True / False",
+                "count": 1,
+                "percentage": 25.0,
+            },
+            {"type": "OPEN_ENDED", "label": "Open ended", "count": 0, "percentage": 0.0},
+        ],
+    }
+
+
+def test_admin_course_overview(auth_client, admin):
+    frontend = CourseFactory(name="Frontend development")
+    backend = CourseFactory(name="Backend development")
+    archived_course = CourseFactory(name="Archived", status=CourseStatus.ARCHIVED)
+
+    active_student = StudentFactory()
+    second_student = StudentFactory()
+    inactive_student = StudentFactory(status=UserStatus.INACTIVE)
+    EnrollmentFactory(course=frontend, student=active_student)
+    EnrollmentFactory(course=frontend, student=second_student)
+    EnrollmentFactory(course=frontend, student=inactive_student)
+    EnrollmentFactory(course=frontend, status=EnrollmentStatus.REMOVED)
+    EnrollmentFactory(course=backend)
+
+    frontend_exam = ExamFactory(course=frontend)
+    second_frontend_exam = ExamFactory(course=frontend, status=ExamStatus.READY)
+    ExamFactory(course=frontend, status=ExamStatus.ARCHIVED)
+    backend_exam = ExamFactory(course=backend)
+    ExamFactory(course=archived_course)
+
+    frontend_assignment = AssignmentFactory(exam=frontend_exam)
+    graded(frontend_assignment, active_student, 1, 40, False)
+    graded(frontend_assignment, active_student, 2, 80, True)
+    graded(AssignmentFactory(exam=second_frontend_exam), second_student, 1, 60, True)
+    graded(AssignmentFactory(exam=backend_exam), StudentFactory(), 1, 75, True)
+
+    overview = auth_client(admin).get(ADMIN).json()["course_overview"]
+
+    assert overview == [
+        {
+            "course_id": str(backend.id),
+            "course_name": "Backend development",
+            "students_count": 1,
+            "exams_count": 1,
+            "average_score": 75.0,
+        },
+        {
+            "course_id": str(frontend.id),
+            "course_name": "Frontend development",
+            "students_count": 2,
+            "exams_count": 2,
+            "average_score": 70.0,
+        },
+    ]
+
+
+def test_admin_dashboard_recent_activity_and_exam_statistics(auth_client, admin):
+    student_a, student_b = StudentFactory.create_batch(2)
+    assignment = AssignmentFactory()
+    ExamAssignmentRecipient.objects.bulk_create(
+        [
+            ExamAssignmentRecipient(assignment=assignment, student=student_a),
+            ExamAssignmentRecipient(assignment=assignment, student=student_b),
+        ]
+    )
+    now = timezone.now()
+    graded_attempt = graded(assignment, student_a, 1, 90, True)
+    graded_attempt.deadline_at = now + timedelta(minutes=10)
+    graded_attempt.submitted_at = now
+    graded_attempt.save(update_fields=["deadline_at", "submitted_at"])
+    AttemptFactory(
+        assignment=assignment,
+        student=student_b,
+        status="PENDING_GRADING",
+        submitted_at=now,
+        deadline_at=now,
+        finalization_reason=FinalizationReason.TIMEOUT,
+    )
+    AssignmentFactory(start_at=now + timedelta(days=3), end_at=None)
+
+    body = auth_client(admin).get(ADMIN).json()
+
+    assert body["summary"]["upcoming_assignments"]["next_7_days"] == 1
+    assert body["recent_exams"][0]["id"]
+    assert body["recent_results"][0]["attempt_id"] == str(graded_attempt.id)
+    assert body["exam_activity"]["current_total"] == 2
+    assert body["exam_statistics"] == {
+        "completed_attempts": 2,
+        "graded_attempts": 1,
+        "passed_attempts": 1,
+        "pass_rate": 100.0,
+        "average_score": 90.0,
+        "assigned_recipients": 2,
+        "completed_recipients": 2,
+        "completion_rate": 100.0,
+        "tracked_submissions": 2,
+        "on_time_submissions": 1,
+        "on_time_submission_rate": 50.0,
+    }
+    assert {event["type"] for event in body["platform_activity"]} >= {
+        "ASSIGNMENT_PUBLISHED",
+        "EXAM_CREATED",
+        "QUESTION_CREATED",
+        "RESULT_RECORDED",
+    }
+
+
 # ------------------------------- teacher -------------------------------
 def test_teacher_dashboard_numbers(auth_client, teacher):
     course_a, course_b = CourseFactory(), CourseFactory()
@@ -153,6 +366,7 @@ def test_teacher_dashboard_numbers(auth_client, teacher):
     CourseTeacherFactory()  # boshqa teacher/kurs
     StudyGroupFactory(course=course_a)
     StudyGroupFactory(course=course_b)
+    StudyGroupFactory(course=course_a, status=GroupStatus.ARCHIVED)
     StudyGroupFactory(course=archived)  # arxiv kurs guruhi sanalmaydi
     StudyGroupFactory()  # begona
 
@@ -246,7 +460,7 @@ def test_dashboards_have_bounded_query_counts(
     EnrollmentFactory(course=course, student=student)
     for number in range(1, 6):
         graded(AssignmentFactory(exam__course=course), student, number, 70, True)
-    with django_assert_max_num_queries(18):
+    with django_assert_max_num_queries(35):
         assert auth_client(admin).get(ADMIN).status_code == 200
     with django_assert_max_num_queries(14):
         assert auth_client(teacher).get(TEACHER).status_code == 200

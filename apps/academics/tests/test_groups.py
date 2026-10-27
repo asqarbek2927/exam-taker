@@ -1,6 +1,6 @@
 import pytest
 
-from apps.academics.choices import CourseStatus, EnrollmentStatus
+from apps.academics.choices import CourseStatus, EnrollmentStatus, GroupStatus
 from apps.academics.models import GroupStudent, StudyGroup
 from apps.academics.tests.factories import (
     CourseFactory,
@@ -9,7 +9,7 @@ from apps.academics.tests.factories import (
     GroupStudentFactory,
     StudyGroupFactory,
 )
-from apps.users.tests.factories import StudentFactory
+from apps.users.tests.factories import StudentFactory, TeacherFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -233,3 +233,120 @@ def test_marking_enrollment_removed_or_completed(auth_client, admin):
 
     client.patch(url, {"status": "REMOVED"}, format="json")
     assert not GroupStudent.objects.filter(group=group, student=enrollment.student).exists()
+
+
+# ---------------------------- global group directory ----------------------------
+def test_admin_creates_group_with_teaching_pair(auth_client, admin):
+    course = CourseFactory()
+    main = CourseTeacherFactory(course=course).teacher
+    support = CourseTeacherFactory(course=course, type="SUPPORT").teacher
+
+    response = auth_client(admin).post(
+        "/api/v1/groups",
+        {
+            "course_id": str(course.id),
+            "name": "Frontend A",
+            "main_teacher_id": str(main.id),
+            "support_teacher_id": str(support.id),
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201
+    assert response.json()["course"] == {"id": str(course.id), "name": course.name}
+    assert response.json()["main_teacher"]["id"] == str(main.id)
+    assert response.json()["support_teacher"]["id"] == str(support.id)
+    assert response.json()["status"] == "ACTIVE"
+
+
+def test_group_teacher_must_be_active_and_assigned_to_course(auth_client, admin):
+    course = CourseFactory()
+    stranger = TeacherFactory()
+    response = auth_client(admin).post(
+        "/api/v1/groups",
+        {
+            "course_id": str(course.id),
+            "name": "Frontend A",
+            "main_teacher_id": str(stranger.id),
+        },
+        format="json",
+    )
+    assert response.status_code == 400
+
+    assigned = CourseTeacherFactory(course=course).teacher
+    same = auth_client(admin).post(
+        "/api/v1/groups",
+        {
+            "course_id": str(course.id),
+            "name": "Frontend B",
+            "main_teacher_id": str(assigned.id),
+            "support_teacher_id": str(assigned.id),
+        },
+        format="json",
+    )
+    assert same.status_code == 400
+
+
+def test_group_directory_list_filters_and_student_preview(auth_client, admin):
+    course = CourseFactory(name="Frontend development")
+    group = StudyGroupFactory(course=course, name="Frontend A")
+    students = [enrolled_student(course) for _ in range(4)]
+    for student in students:
+        GroupStudentFactory(group=group, student=student)
+    StudyGroupFactory(status=GroupStatus.ARCHIVED)
+
+    response = auth_client(admin).get(
+        "/api/v1/groups",
+        {"course_id": str(course.id), "status": "ACTIVE", "search": "frontend"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert [item["id"] for item in data] == [str(group.id)]
+    assert data[0]["students_count"] == 4
+    assert len(data[0]["students_preview"]) == 3
+
+
+def test_group_directory_summary_counts_unique_students(auth_client, admin):
+    course = CourseFactory()
+    main = CourseTeacherFactory(course=course).teacher
+    support = CourseTeacherFactory(course=course, type="SUPPORT").teacher
+    first = StudyGroupFactory(course=course, main_teacher=main, support_teacher=support)
+    second = StudyGroupFactory(course=course)
+    StudyGroupFactory(status=GroupStatus.ARCHIVED)
+    shared = enrolled_student(course)
+    first_only = enrolled_student(course)
+    GroupStudentFactory(group=first, student=shared)
+    GroupStudentFactory(group=first, student=first_only)
+    GroupStudentFactory(group=second, student=shared)
+
+    response = auth_client(admin).get("/api/v1/groups/summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "active_groups": 2,
+        "grouped_students": 2,
+        "teaching_pairs": 1,
+        "archived_groups": 1,
+    }
+
+
+def test_group_archive_restore_and_read_only_rule(auth_client, admin):
+    group = StudyGroupFactory()
+    client = auth_client(admin)
+
+    archived = client.post(f"/api/v1/groups/{group.id}/archive")
+    assert archived.status_code == 200
+    assert archived.json()["status"] == "ARCHIVED"
+    assert client.patch(
+        f"/api/v1/groups/{group.id}", {"name": "Blocked"}, format="json"
+    ).status_code == 400
+
+    restored = client.post(f"/api/v1/groups/{group.id}/restore")
+    assert restored.status_code == 200
+    assert restored.json()["status"] == "ACTIVE"
+
+
+def test_group_directory_is_admin_only(auth_client, teacher):
+    assert auth_client(teacher).get("/api/v1/groups").status_code == 403
+    assert auth_client(teacher).get("/api/v1/groups/summary").status_code == 403

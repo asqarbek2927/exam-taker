@@ -5,7 +5,7 @@ from django.db.models.functions import Coalesce
 
 from apps.users.choices import UserRole
 
-from .choices import EnrollmentStatus, ModuleStatus
+from .choices import CourseStatus, EnrollmentStatus, GroupStatus, ModuleStatus
 from .models import Course, CourseTeacher, Enrollment, GroupStudent, Module, StudyGroup
 
 
@@ -87,6 +87,27 @@ def course_detail_queryset() -> QuerySet[Course]:
     return with_course_stats(Course.objects.all())
 
 
+def course_catalog_summary() -> dict:
+    counts = Course.objects.aggregate(
+        total_courses=Count("pk"),
+        active_courses=Count("pk", filter=Q(status=CourseStatus.ACTIVE)),
+        draft_courses=Count("pk", filter=Q(status=CourseStatus.DRAFT)),
+        archived_courses=Count("pk", filter=Q(status=CourseStatus.ARCHIVED)),
+    )
+    visible_course_statuses = [CourseStatus.DRAFT, CourseStatus.ACTIVE]
+    return {
+        **counts,
+        "learning_modules": Module.objects.filter(
+            status=ModuleStatus.ACTIVE,
+            course__status__in=visible_course_statuses,
+        ).count(),
+        "course_enrollments": Enrollment.objects.filter(
+            status=EnrollmentStatus.ACTIVE,
+            course__status__in=visible_course_statuses,
+        ).count(),
+    }
+
+
 def course_teachers(course: Course) -> QuerySet[CourseTeacher]:
     return CourseTeacher.objects.filter(course=course).select_related("teacher")
 
@@ -125,7 +146,59 @@ def course_modules(course: Course, *, with_question_preview: bool = False) -> Qu
 # StudyGroup
 # --------------------------------------------------------------------------
 def course_groups(course: Course) -> QuerySet[StudyGroup]:
-    return StudyGroup.objects.filter(course=course).annotate(students_count=Count("group_students"))
+    return (
+        StudyGroup.objects.filter(course=course)
+        .select_related("course", "main_teacher", "support_teacher")
+        .annotate(students_count=Count("group_students"))
+        .prefetch_related(
+            Prefetch(
+                "group_students",
+                queryset=GroupStudent.objects.select_related("student").order_by("added_at"),
+                to_attr="student_memberships",
+            )
+        )
+    )
+
+
+def group_directory() -> QuerySet[StudyGroup]:
+    return (
+        StudyGroup.objects.select_related("course", "main_teacher", "support_teacher")
+        .annotate(students_count=Count("group_students"))
+        .prefetch_related(
+            Prefetch(
+                "group_students",
+                queryset=GroupStudent.objects.select_related("student").order_by("added_at"),
+                to_attr="student_memberships",
+            )
+        )
+    )
+
+
+def group_directory_summary() -> dict:
+    available = Q(course__status__in=[CourseStatus.DRAFT, CourseStatus.ACTIVE])
+    counts = StudyGroup.objects.aggregate(
+        active_groups=Count("pk", filter=available & Q(status=GroupStatus.ACTIVE)),
+        archived_groups=Count("pk", filter=Q(status=GroupStatus.ARCHIVED)),
+        teaching_pairs=Count(
+            "pk",
+            filter=(
+                available
+                & Q(status=GroupStatus.ACTIVE)
+                & Q(main_teacher__isnull=False)
+                & Q(support_teacher__isnull=False)
+            ),
+        ),
+    )
+    grouped_students = (
+        GroupStudent.objects.filter(
+            group__status=GroupStatus.ACTIVE,
+            group__course__status__in=[CourseStatus.DRAFT, CourseStatus.ACTIVE],
+        )
+        .values("student_id")
+        .distinct()
+        .count()
+    )
+    return {**counts, "grouped_students": grouped_students}
 
 
 def group_students(group: StudyGroup) -> QuerySet[GroupStudent]:

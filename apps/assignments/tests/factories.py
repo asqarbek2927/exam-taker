@@ -26,6 +26,9 @@ class AssignmentFactory(DjangoModelFactory):
     duration_minutes = 30
     max_attempts = 2
     status = AssignmentStatus.PUBLISHED
+    published_at = factory.LazyAttribute(
+        lambda obj: None if obj.status == AssignmentStatus.DRAFT else timezone.now()
+    )
 
     @factory.post_generation
     def ensure_question(obj, create, extracted, **kwargs):

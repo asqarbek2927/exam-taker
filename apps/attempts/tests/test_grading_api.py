@@ -285,7 +285,7 @@ def test_grading_access_rules(auth_client, api_client, admin, world, submitted):
     assert auth_client(outsider).patch(url, body, format="json").status_code == 404
 
     colleague = CourseTeacherFactory(
-        course=world.course
+        course=world.course, type="SUPPORT"
     ).teacher  # boshqa teacher ham baholay oladi
     assert auth_client(colleague).patch(url, body, format="json").status_code == 200
     assert auth_client(admin).patch(url, {"points_awarded": 2}, format="json").status_code == 200

@@ -4,7 +4,7 @@ from django.db import models
 
 from common.models import TimeStampedModel, UUIDModel
 
-from .choices import UserRole, UserStatus
+from .choices import UserLanguage, UserRole, UserStatus
 from .managers import UserManager
 
 
@@ -13,6 +13,10 @@ class User(UUIDModel, TimeStampedModel, AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     role = models.CharField(max_length=20, choices=UserRole.choices, db_index=True)
     avatar_url = models.URLField(max_length=500, blank=True)
+    phone_number = models.CharField(max_length=32, blank=True)
+    language = models.CharField(
+        max_length=5, choices=UserLanguage.choices, default=UserLanguage.ENGLISH
+    )
     status = models.CharField(
         max_length=10, choices=UserStatus.choices, default=UserStatus.ACTIVE, db_index=True
     )

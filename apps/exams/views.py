@@ -21,6 +21,7 @@ from .serializers import (
     ExamCreateSerializer,
     ExamDetailSerializer,
     ExamDuplicateResponseSerializer,
+    ExamLibrarySummarySerializer,
     ExamListSerializer,
     ExamUpdateSerializer,
 )
@@ -138,3 +139,8 @@ class ExamViewSet(
         copy, skipped = services.duplicate_exam(user=request.user, exam=self.get_object())
         data = {**self._detail(copy.pk), "skipped_question_ids": skipped}
         return Response(data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(tags=["exams"], responses={200: ExamLibrarySummarySerializer})
+    @action(detail=False, methods=["get"])
+    def summary(self, request):
+        return Response(selectors.exam_library_summary(request.user))

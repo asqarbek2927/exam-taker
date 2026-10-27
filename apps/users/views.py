@@ -1,4 +1,4 @@
-from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -12,17 +12,25 @@ from common.exceptions import BusinessRuleError
 from common.permissions import IsSuperAdmin
 from common.throttling import LoginIPRateThrottle, LoginRateThrottle
 
-from . import services
+from . import selectors, services
 from .choices import UserRole
-from .filters import PersonFilter, UserFilter
+from .filters import PersonFilter, StudentDirectoryFilter, TeacherDirectoryFilter, UserFilter
 from .models import User
 from .serializers import (
+    ChangeOwnPasswordSerializer,
+    CurrentUserSerializer,
+    CurrentUserUpdateSerializer,
     LoginResponseSerializer,
     LoginSerializer,
     LogoutSerializer,
     RefreshResponseSerializer,
     RefreshSerializer,
     SetPasswordSerializer,
+    StudentDirectorySerializer,
+    StudentDirectorySummarySerializer,
+    TeacherDirectorySerializer,
+    TeacherDirectorySummarySerializer,
+    UserCreateResponseSerializer,
     UserCreateSerializer,
     UserSerializer,
     UserUpdateSerializer,
@@ -97,12 +105,38 @@ class LogoutView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-@extend_schema(tags=["auth"], responses={200: UserSerializer})
+@extend_schema(tags=["auth"], responses={200: CurrentUserSerializer})
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        return Response(CurrentUserSerializer(request.user).data)
+
+    @extend_schema(
+        tags=["auth"], request=CurrentUserUpdateSerializer, responses={200: CurrentUserSerializer}
+    )
+    def patch(self, request):
+        serializer = CurrentUserUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        user = services.update_current_user(request.user, **serializer.validated_data)
+        return Response(CurrentUserSerializer(user).data)
+
+
+@extend_schema(
+    tags=["auth"],
+    request=ChangeOwnPasswordSerializer,
+    responses={204: OpenApiResponse(description="Password o‘zgartirildi.")},
+)
+class ChangeOwnPasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangeOwnPasswordSerializer(data=request.data, context={"user": request.user})
+        serializer.is_valid(raise_exception=True)
+        services.set_user_password(
+            user=request.user, password=serializer.validated_data["new_password"]
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # --------------------------------------------------------------------------
@@ -112,7 +146,31 @@ class MeView(APIView):
     list=extend_schema(tags=["users"]),
     retrieve=extend_schema(tags=["users"]),
     create=extend_schema(
-        tags=["users"], request=UserCreateSerializer, responses={201: UserSerializer}
+        tags=["users"],
+        request=UserCreateSerializer,
+        responses={201: UserCreateResponseSerializer},
+        examples=[
+            OpenApiExample(
+                "Random password (avatarsiz)",
+                value={
+                    "full_name": "Ali Valiyev",
+                    "email": "ali@example.com",
+                    "generate_random_password": True,
+                    "role": "STUDENT",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Custom password (avatarsiz)",
+                value={
+                    "full_name": "Vali Aliyev",
+                    "email": "vali@example.com",
+                    "password": "Strong-Pass123!",
+                    "role": "TEACHER",
+                },
+                request_only=True,
+            ),
+        ],
     ),
     partial_update=extend_schema(
         tags=["users"], request=UserUpdateSerializer, responses={200: UserSerializer}
@@ -140,8 +198,13 @@ class UserViewSet(
     def create(self, request, *args, **kwargs):
         serializer = UserCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = services.create_user(**serializer.validated_data)
-        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+        fields = dict(serializer.validated_data)
+        fields.pop("generate_random_password", None)
+        user, generated_password = services.create_user(**fields)
+        data = UserCreateResponseSerializer(
+            user, context={"generated_password": generated_password}
+        ).data
+        return Response(data, status=status.HTTP_201_CREATED)
 
     def partial_update(self, request, *args, **kwargs):
         user = self.get_object()
@@ -197,6 +260,22 @@ class _RoleScopedReadOnlyViewSet(
 )
 class TeacherViewSet(_RoleScopedReadOnlyViewSet):
     role = UserRole.TEACHER
+    serializer_class = TeacherDirectorySerializer
+    filterset_class = TeacherDirectoryFilter
+    ordering_fields = ["full_name", "email", "created_at", "courses_count", "students_count"]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return User.objects.none()
+        return selectors.teacher_directory()
+
+    @extend_schema(
+        tags=["teachers"],
+        responses={200: TeacherDirectorySummarySerializer},
+    )
+    @action(detail=False, methods=["get"])
+    def summary(self, request):
+        return Response(selectors.teacher_directory_summary())
 
 
 @extend_schema_view(
@@ -204,3 +283,27 @@ class TeacherViewSet(_RoleScopedReadOnlyViewSet):
 )
 class StudentViewSet(_RoleScopedReadOnlyViewSet):
     role = UserRole.STUDENT
+    serializer_class = StudentDirectorySerializer
+    filterset_class = StudentDirectoryFilter
+    ordering_fields = [
+        "full_name",
+        "email",
+        "created_at",
+        "courses_count",
+        "exams_taken",
+        "average_score",
+        "passed_exams",
+    ]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return User.objects.none()
+        return selectors.student_directory()
+
+    @extend_schema(
+        tags=["students"],
+        responses={200: StudentDirectorySummarySerializer},
+    )
+    @action(detail=False, methods=["get"])
+    def summary(self, request):
+        return Response(selectors.student_directory_summary())

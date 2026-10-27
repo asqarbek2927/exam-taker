@@ -2,6 +2,7 @@ from django.db import models
 
 
 class CourseStatus(models.TextChoices):
+    DRAFT = "DRAFT", "Draft"
     ACTIVE = "ACTIVE", "Active"
     ARCHIVED = "ARCHIVED", "Archived"
 
@@ -18,5 +19,10 @@ class EnrollmentStatus(models.TextChoices):
 
 
 class ModuleStatus(models.TextChoices):
+    ACTIVE = "ACTIVE", "Active"
+    ARCHIVED = "ARCHIVED", "Archived"
+
+
+class GroupStatus(models.TextChoices):
     ACTIVE = "ACTIVE", "Active"
     ARCHIVED = "ARCHIVED", "Archived"
