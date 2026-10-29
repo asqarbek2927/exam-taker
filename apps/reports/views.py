@@ -55,8 +55,7 @@ class ResultListView(generics.ListAPIView):
     tags=["results"],
     responses={200: ResultSummarySerializer},
     description=(
-        "Results page kartalari va grading progress. List bilan bir xil "
-        "filter/searchlarni oladi."
+        "Results page kartalari va grading progress. List bilan bir xil filter/searchlarni oladi."
     ),
 )
 class ResultSummaryView(generics.GenericAPIView):

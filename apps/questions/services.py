@@ -9,7 +9,7 @@ from apps.academics.models import Course, Module
 from apps.academics.selectors import has_course_access
 from common.exceptions import AccessDeniedError, BusinessRuleError, ConflictError
 
-from .choices import DEFAULT_POINTS, QuestionStatus
+from .choices import DEFAULT_POINTS, QuestionDifficulty, QuestionStatus
 from .models import Question, QuestionOption
 from .validators import validate_options
 
@@ -57,14 +57,15 @@ def _is_locked(question: Question) -> bool:
 
 @transaction.atomic
 def create_question(
-        *,
-        user,
-        course: Course,
-        module: Module,
-        type: str,
-        text: str,
-        options: list[dict],
-        default_points: Decimal | None = None,
+    *,
+    user,
+    course: Course,
+    module: Module,
+    type: str,
+    text: str,
+    options: list[dict],
+    default_points: Decimal | None = None,
+    difficulty: str = QuestionDifficulty.MEDIUM,
 ) -> Question:
     if not has_course_access(user, course):
         raise AccessDeniedError("Siz bu kursga biriktirilmagansiz.")
@@ -77,6 +78,7 @@ def create_question(
         module=module,
         created_by=user,
         type=type,
+        difficulty=difficulty,
         text=text.strip(),
         default_points=default_points if default_points is not None else DEFAULT_POINTS[type],
     )
@@ -106,6 +108,8 @@ def update_question(*, question: Question, **fields) -> Question:
         question.module = fields["module"]
     if "type" in fields:
         question.type = new_type
+    if "difficulty" in fields:
+        question.difficulty = fields["difficulty"]
     if "text" in fields:
         question.text = fields["text"].strip()
     if "default_points" in fields:

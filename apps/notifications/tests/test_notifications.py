@@ -37,9 +37,7 @@ def test_list_and_summary_are_scoped_to_current_user(auth_client, student, teach
     assert [item["id"] for item in unread_items] == [str(unread.id)]
 
 
-def test_mark_read_is_idempotent_and_cannot_touch_another_inbox(
-    auth_client, student, teacher
-):
+def test_mark_read_is_idempotent_and_cannot_touch_another_inbox(auth_client, student, teacher):
     own = create_notification(student)
     foreign = create_notification(teacher)
     client = auth_client(student)

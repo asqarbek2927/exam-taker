@@ -1,6 +1,7 @@
 from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -17,12 +18,17 @@ from .choices import UserRole
 from .filters import PersonFilter, StudentDirectoryFilter, TeacherDirectoryFilter, UserFilter
 from .models import User
 from .serializers import (
+    AvatarResponseSerializer,
+    AvatarUploadSerializer,
     ChangeOwnPasswordSerializer,
     CurrentUserSerializer,
     CurrentUserUpdateSerializer,
     LoginResponseSerializer,
     LoginSerializer,
     LogoutSerializer,
+    PreferencesSerializer,
+    PreferencesUpdateSerializer,
+    ProfileUpdateSerializer,
     RefreshResponseSerializer,
     RefreshSerializer,
     SetPasswordSerializer,
@@ -110,16 +116,68 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(CurrentUserSerializer(request.user).data)
+        return Response(CurrentUserSerializer(request.user, context={"request": request}).data)
 
     @extend_schema(
         tags=["auth"], request=CurrentUserUpdateSerializer, responses={200: CurrentUserSerializer}
     )
     def patch(self, request):
-        serializer = CurrentUserUpdateSerializer(data=request.data, partial=True)
+        serializer = CurrentUserUpdateSerializer(
+            data=request.data, partial=True, context={"user": request.user}
+        )
         serializer.is_valid(raise_exception=True)
         user = services.update_current_user(request.user, **serializer.validated_data)
-        return Response(CurrentUserSerializer(user).data)
+        return Response(CurrentUserSerializer(user, context={"request": request}).data)
+
+
+@extend_schema(tags=["profile"], responses={200: CurrentUserSerializer})
+class ProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(CurrentUserSerializer(request.user, context={"request": request}).data)
+
+    @extend_schema(
+        tags=["profile"], request=ProfileUpdateSerializer, responses={200: CurrentUserSerializer}
+    )
+    def patch(self, request):
+        serializer = ProfileUpdateSerializer(
+            data=request.data, partial=True, context={"user": request.user}
+        )
+        serializer.is_valid(raise_exception=True)
+        user = services.update_current_user(request.user, **serializer.validated_data)
+        return Response(CurrentUserSerializer(user, context={"request": request}).data)
+
+
+@extend_schema(tags=["profile"])
+class ProfilePhotoView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    @extend_schema(request=AvatarUploadSerializer, responses={200: AvatarResponseSerializer})
+    def post(self, request):
+        serializer = AvatarUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = services.replace_avatar(request.user, serializer.validated_data["image"])
+        avatar_url = request.build_absolute_uri(user.avatar.url)
+        return Response({"avatar_url": avatar_url, "updated_at": user.updated_at})
+
+    @extend_schema(responses={204: OpenApiResponse(description="Profil rasmi o‘chirildi.")})
+    def delete(self, request):
+        services.delete_avatar(request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(tags=["profile"])
+class PreferencesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(request=PreferencesUpdateSerializer, responses={200: PreferencesSerializer})
+    def patch(self, request):
+        serializer = PreferencesUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        user = services.update_preferences(request.user, **serializer.validated_data)
+        return Response({"language": user.language, "theme": user.theme})
 
 
 @extend_schema(

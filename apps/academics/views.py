@@ -554,9 +554,7 @@ class GroupDirectoryViewSet(
         group = services.restore_group(self.get_object())
         return self._group_response(group.pk)
 
-    @extend_schema(
-        tags=["group-directory"], responses={200: GroupDirectorySummarySerializer}
-    )
+    @extend_schema(tags=["group-directory"], responses={200: GroupDirectorySummarySerializer})
     @action(detail=False, methods=["get"])
     def summary(self, request):
         return Response(selectors.group_directory_summary())

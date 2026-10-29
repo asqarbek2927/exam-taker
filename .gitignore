@@ -3,8 +3,12 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.aws
+.env.production
+!.env.aws.example
 *.sqlite3
 staticfiles/
+media/
 .pytest_cache/
 .ruff_cache/
 .coverage

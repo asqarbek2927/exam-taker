@@ -232,6 +232,18 @@ attempt (start/autosave/submit/grading/expiry/leakage), DB constraintlar, race c
 
 ## Production eslatmalari
 
+Frontendga topshirish holati va AWS EC2 HTTP deploy qadamlari:
+[`docs/FRONTEND_AND_AWS_HANDOFF_UZ.md`](docs/FRONTEND_AND_AWS_HANDOFF_UZ.md).
+Faqat hozir ishlaydigan endpointlarning frontend ro‘yxati:
+[`docs/FRONTEND_READY_APIS_UZ.md`](docs/FRONTEND_READY_APIS_UZ.md).
+
+AWS uchun alohida compose konfiguratsiyasi PostgreSQL, Nginx port 80 va persistent media bilan:
+
+```bash
+cp .env.aws.example .env.aws
+docker compose --env-file .env.aws -f docker-compose.aws.yml up -d --build
+```
+
 * `DJANGO_SETTINGS_MODULE=config.settings.prod`, `SECRET_KEY`, `ALLOWED_HOSTS`,
   `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS` ni env orqali bering (`.env` ga qarang).
   Ko‘p foydalanuvchi va parallel yozuvlar uchun PostgreSQL tanlang va `DATABASE_URL` ni sozlang.

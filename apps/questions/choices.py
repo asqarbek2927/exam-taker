@@ -13,6 +13,13 @@ class QuestionType(models.TextChoices):
 class QuestionStatus(models.TextChoices):
     ACTIVE = "ACTIVE", "Active"
     ARCHIVED = "ARCHIVED", "Archived"
+    DELETED = "DELETED", "Deleted"
+
+
+class QuestionDifficulty(models.TextChoices):
+    EASY = "EASY", "Easy"
+    MEDIUM = "MEDIUM", "Medium"
+    HARD = "HARD", "Hard"
 
 
 # TZ 8.1: tavsiya etilgan default ballar (faqat `default_points` berilmagan holatda).

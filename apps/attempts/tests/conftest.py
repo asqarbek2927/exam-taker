@@ -87,12 +87,17 @@ class Api:
 
     def __init__(self, client):
         self.client = client
+        self._answer_revisions = {}
 
     def start(self, assignment):
         return self.client.post(f"/api/v1/exam-assignments/{assignment.id}/start")
 
     def answer(self, attempt_id, exam_question, **body):
         eq_id = getattr(exam_question, "id", exam_question)
+        key = (str(attempt_id), str(eq_id))
+        if "revision" not in body:
+            body["revision"] = self._answer_revisions.get(key, 0) + 1
+        self._answer_revisions[key] = body["revision"]
         return self.client.put(
             f"/api/v1/attempts/{attempt_id}/answers/{eq_id}", body, format="json"
         )

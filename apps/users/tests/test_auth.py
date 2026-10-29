@@ -12,10 +12,14 @@ REFRESH = "/api/v1/auth/refresh"
 LOGOUT = "/api/v1/auth/logout"
 ME = "/api/v1/auth/me"
 CHANGE_PASSWORD = "/api/v1/auth/change-password"
+PROFILE = "/api/v1/profile"
+PROFILE_PREFERENCES = "/api/v1/profile/preferences"
 
 
 def login(client, user, password=DEFAULT_PASSWORD):
-    return client.post(LOGIN, {"email": user.email, "password": password}, format="json")
+    return client.post(
+        LOGIN, {"email_or_username": user.email, "password": password}, format="json"
+    )
 
 
 def bearer(client, access):
@@ -62,7 +66,7 @@ def test_login_missing_fields_returns_422(api_client):
     assert response.status_code == 422
     body = response.json()
     assert body["message"] == "Validation failed"
-    assert set(body["errors"]) == {"email", "password"}
+    assert set(body["errors"]) == {"email_or_username", "password"}
 
 
 def test_login_is_throttled_per_ip_and_email(api_client, teacher, monkeypatch):
@@ -115,22 +119,30 @@ def test_me_returns_current_user(api_client, teacher):
 def test_me_updates_language_preference(api_client, teacher):
     bearer(api_client, login(api_client, teacher).json()["access_token"])
 
-    response = api_client.patch(ME, {"language": "uz"}, format="json")
+    response = api_client.patch(PROFILE_PREFERENCES, {"language": "uz"}, format="json")
     assert response.status_code == 200
     assert response.json()["language"] == "uz"
     teacher.refresh_from_db()
     assert teacher.language == "uz"
 
-    invalid = api_client.patch(ME, {"language": "de"}, format="json")
+    invalid = api_client.patch(PROFILE_PREFERENCES, {"language": "de"}, format="json")
     assert invalid.status_code == 422
     assert "language" in invalid.json()["errors"]
 
 
-def test_me_updates_profile_but_keeps_managed_fields_read_only(api_client, teacher):
+def test_profile_updates_phone_and_rejects_managed_fields(api_client, teacher):
     bearer(api_client, login(api_client, teacher).json()["access_token"])
 
     response = api_client.patch(
-        ME,
+        PROFILE,
+        {"phone_number": "+998 90 123 45 67"},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.json()["phone_number"] == "+998 90 123 45 67"
+
+    forbidden = api_client.patch(
+        PROFILE,
         {
             "full_name": "Updated Teacher",
             "phone_number": "+998 90 123 45 67",
@@ -141,10 +153,8 @@ def test_me_updates_profile_but_keeps_managed_fields_read_only(api_client, teach
         },
         format="json",
     )
-    assert response.status_code == 200
-    assert response.json()["full_name"] == "Updated Teacher"
-    assert response.json()["phone_number"] == "+998 90 123 45 67"
-    assert response.json()["avatar_url"] == ""
+    assert forbidden.status_code == 422
+    assert {"email", "role", "status"}.issubset(forbidden.json()["errors"])
     teacher.refresh_from_db()
     assert teacher.email != "hacker@example.com"
     assert teacher.role == "TEACHER"
@@ -154,7 +164,7 @@ def test_me_updates_profile_but_keeps_managed_fields_read_only(api_client, teach
 @pytest.mark.parametrize("phone_number", ["123", "not-a-phone", "+998 abc"])
 def test_me_rejects_invalid_phone(api_client, teacher, phone_number):
     bearer(api_client, login(api_client, teacher).json()["access_token"])
-    response = api_client.patch(ME, {"phone_number": phone_number}, format="json")
+    response = api_client.patch(PROFILE, {"phone_number": phone_number}, format="json")
     assert response.status_code == 422
     assert "phone_number" in response.json()["errors"]
 

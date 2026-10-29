@@ -226,6 +226,7 @@ class Command(BaseCommand):
                     attempt_id=attempt.pk,
                     exam_question_id=eq[key].pk,
                     option_ids=[o.pk for o in options],
+                    revision=1,
                 )
             if essay is not None:
                 attempts.save_answer(
@@ -233,6 +234,7 @@ class Command(BaseCommand):
                     attempt_id=attempt.pk,
                     exam_question_id=eq["gil"].pk,
                     text_answer=essay,
+                    revision=1,
                 )
             return attempts.submit_attempt(student=student, attempt_id=attempt.pk)
 

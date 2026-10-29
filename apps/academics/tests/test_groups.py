@@ -338,9 +338,10 @@ def test_group_archive_restore_and_read_only_rule(auth_client, admin):
     archived = client.post(f"/api/v1/groups/{group.id}/archive")
     assert archived.status_code == 200
     assert archived.json()["status"] == "ARCHIVED"
-    assert client.patch(
-        f"/api/v1/groups/{group.id}", {"name": "Blocked"}, format="json"
-    ).status_code == 400
+    assert (
+        client.patch(f"/api/v1/groups/{group.id}", {"name": "Blocked"}, format="json").status_code
+        == 400
+    )
 
     restored = client.post(f"/api/v1/groups/{group.id}/restore")
     assert restored.status_code == 200

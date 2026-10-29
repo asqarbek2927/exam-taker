@@ -6,11 +6,16 @@ from apps.academics.models import Course, Module
 from apps.users.serializers import UserBriefSerializer
 from common.fields import UUIDRelatedField
 
-from .choices import QuestionType
+from .choices import QuestionDifficulty, QuestionType
 from .models import Question, QuestionOption
 from .validators import validate_options
 
-POINTS_FIELD = {"max_digits": 6, "decimal_places": 2, "min_value": Decimal("0.01")}
+POINTS_FIELD = {
+    "max_digits": 6,
+    "decimal_places": 2,
+    "min_value": Decimal("1"),
+    "max_value": Decimal("100"),
+}
 
 
 # --------------------------------------------------------------------------
@@ -53,12 +58,14 @@ class QuestionListSerializer(serializers.ModelSerializer):
             "course",
             "module",
             "type",
+            "difficulty",
             "text",
             "default_points",
             "status",
             "created_by",
             "created_at",
             "updated_at",
+            "version",
         ]
         read_only_fields = fields
 
@@ -90,6 +97,10 @@ class QuestionCreateSerializer(serializers.Serializer):
     course_id = UUIDRelatedField(queryset=Course.objects.all(), source="course")
     module_id = UUIDRelatedField(queryset=Module.objects.all(), source="module")
     type = serializers.ChoiceField(choices=QuestionType.choices)
+    difficulty = serializers.ChoiceField(
+        choices=QuestionDifficulty.choices,
+        required=False,
+    )
     text = serializers.CharField()
     default_points = serializers.DecimalField(required=False, **POINTS_FIELD)
     options = QuestionOptionInputSerializer(many=True, required=False)
@@ -107,6 +118,10 @@ class QuestionUpdateSerializer(serializers.Serializer):
 
     module_id = UUIDRelatedField(queryset=Module.objects.all(), source="module", required=False)
     type = serializers.ChoiceField(choices=QuestionType.choices, required=False)
+    difficulty = serializers.ChoiceField(
+        choices=QuestionDifficulty.choices,
+        required=False,
+    )
     text = serializers.CharField(required=False)
     default_points = serializers.DecimalField(required=False, **POINTS_FIELD)
     options = QuestionOptionInputSerializer(many=True, required=False)

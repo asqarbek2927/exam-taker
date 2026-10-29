@@ -77,6 +77,7 @@ class ExamListSerializer(serializers.ModelSerializer):
             "uses_count",
             "created_at",
             "updated_at",
+            "version",
         ]
         read_only_fields = fields
 

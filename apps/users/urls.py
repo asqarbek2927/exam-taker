@@ -6,6 +6,9 @@ from .views import (
     LoginView,
     LogoutView,
     MeView,
+    PreferencesView,
+    ProfilePhotoView,
+    ProfileView,
     RefreshView,
     StudentViewSet,
     TeacherViewSet,
@@ -23,4 +26,12 @@ auth_urlpatterns = [
     path("auth/logout", LogoutView.as_view(), name="auth-logout"),
     path("auth/me", MeView.as_view(), name="auth-me"),
     path("auth/change-password", ChangeOwnPasswordView.as_view(), name="auth-change-password"),
+    path("profile", ProfileView.as_view(), name="profile"),
+    path("profile/photo", ProfilePhotoView.as_view(), name="profile-photo"),
+    path(
+        "profile/change-password",
+        ChangeOwnPasswordView.as_view(),
+        name="profile-change-password",
+    ),
+    path("profile/preferences", PreferencesView.as_view(), name="profile-preferences"),
 ]

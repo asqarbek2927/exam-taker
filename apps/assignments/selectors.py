@@ -25,12 +25,16 @@ from django.utils import timezone
 
 from apps.academics.choices import EnrollmentStatus
 from apps.academics.models import CourseTeacher, Enrollment, GroupStudent
-from apps.exams.models import ExamQuestion
 from apps.users.choices import UserRole, UserStatus
 from apps.users.models import User
 
 from .choices import AssignmentStatus, AudienceType, EffectiveStatus
-from .models import ExamAssignment, ExamAssignmentGroup, ExamAssignmentStudent
+from .models import (
+    AssignmentSnapshotQuestion,
+    ExamAssignment,
+    ExamAssignmentGroup,
+    ExamAssignmentStudent,
+)
 
 
 # --------------------------------------------------------------------------
@@ -39,6 +43,8 @@ from .models import ExamAssignment, ExamAssignmentGroup, ExamAssignmentStudent
 def effective_status_of(assignment: ExamAssignment, now: datetime | None = None) -> str:
     """Python tomonidagi hisob. `effective_status_expr` bilan bir xil (testlar tekshiradi)."""
     now = now or timezone.now()
+    if assignment.is_archived:
+        return EffectiveStatus.ARCHIVED
     if assignment.status != AssignmentStatus.PUBLISHED:
         return str(assignment.status)
     if assignment.start_at > now:
@@ -52,6 +58,7 @@ def effective_status_expr(now: datetime) -> Case:
     """ORM tomonidagi hisob — filterlash va annotatsiya uchun."""
     published = AssignmentStatus.PUBLISHED
     return Case(
+        When(is_archived=True, then=Value(EffectiveStatus.ARCHIVED)),
         When(status=published, start_at__gt=now, then=Value(EffectiveStatus.SCHEDULED)),
         When(status=published, end_at__lte=now, then=Value(EffectiveStatus.COMPLETED)),
         When(status=published, then=Value(EffectiveStatus.ACTIVE)),
@@ -151,9 +158,9 @@ def student_assignments(student: User, now: datetime | None = None):
     specific = ExamAssignmentStudent.objects.filter(assignment=OuterRef("pk"), student=student)
 
     audience = (
-            Q(audience_type=AudienceType.ALL_COURSE_STUDENTS)
-            | (Q(audience_type=AudienceType.GROUPS) & Q(Exists(in_group)))
-            | (Q(audience_type=AudienceType.SPECIFIC_STUDENTS) & Q(Exists(specific)))
+        Q(audience_type=AudienceType.ALL_COURSE_STUDENTS)
+        | (Q(audience_type=AudienceType.GROUPS) & Q(Exists(in_group)))
+        | (Q(audience_type=AudienceType.SPECIFIC_STUDENTS) & Q(Exists(specific)))
     )
     own_attempts = ExamAttempt.objects.filter(assignment=OuterRef("pk"), student=student)
 
@@ -164,7 +171,7 @@ def student_assignments(student: User, now: datetime | None = None):
                 AssignmentStatus.PUBLISHED,
                 AssignmentStatus.PAUSED,
                 AssignmentStatus.COMPLETED,
-            ]
+            ],
         )
         .filter(Exists(enrolled))
         .filter(audience)
@@ -188,9 +195,11 @@ def student_assignments(student: User, now: datetime | None = None):
             ),
             questions_count=Coalesce(
                 Subquery(
-                    ExamQuestion.objects.filter(exam_id=OuterRef("exam_id"))
+                    AssignmentSnapshotQuestion.objects.filter(
+                        snapshot__assignment_id=OuterRef("pk")
+                    )
                     .order_by()
-                    .values("exam_id")
+                    .values("snapshot__assignment_id")
                     .annotate(n=Count("pk"))
                     .values("n"),
                     output_field=IntegerField(),
@@ -199,9 +208,11 @@ def student_assignments(student: User, now: datetime | None = None):
             ),
             total_points=Coalesce(
                 Subquery(
-                    ExamQuestion.objects.filter(exam_id=OuterRef("exam_id"))
+                    AssignmentSnapshotQuestion.objects.filter(
+                        snapshot__assignment_id=OuterRef("pk")
+                    )
                     .order_by()
-                    .values("exam_id")
+                    .values("snapshot__assignment_id")
                     .annotate(total=Sum("points"))
                     .values("total"),
                     output_field=DecimalField(max_digits=10, decimal_places=2),

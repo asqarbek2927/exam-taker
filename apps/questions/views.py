@@ -53,8 +53,8 @@ from .serializers import (
     destroy=extend_schema(
         tags=["questions"],
         description=(
-                "Imtihonda ishlatilmagan savol o‘chiriladi (204). Ishlatilgan bo‘lsa — "
-                '`ARCHIVED` (200, `{"archived": true}`).'
+            "Imtihonda ishlatilmagan savol o‘chiriladi (204). Ishlatilgan bo‘lsa — "
+            '`ARCHIVED` (200, `{"archived": true}`).'
         ),
         responses={
             204: OpenApiResponse(description="Savol o‘chirildi."),

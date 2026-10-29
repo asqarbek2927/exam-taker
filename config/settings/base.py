@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "apps.attempts",
     "apps.reports",
     "apps.notifications",
+    "apps.audit",
 ]
 
 MIDDLEWARE = [
@@ -121,6 +122,8 @@ USE_TZ = True
 # --------------------------------------------------------------------------
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
@@ -186,12 +189,18 @@ SPECTACULAR_SETTINGS = {
         "CourseTeacherTypeEnum": "apps.academics.choices.CourseTeacherType",
         "EnrollmentStatusEnum": "apps.academics.choices.EnrollmentStatus",
         "QuestionTypeEnum": "apps.questions.choices.QuestionType",
+        "QuestionStatusEnum": "apps.questions.choices.QuestionStatus",
         "ExamStatusEnum": "apps.exams.choices.ExamStatus",
         "ExamWritableStatusEnum": "apps.exams.choices.ExamWritableStatus",
         "AssignmentStatusEnum": "apps.assignments.choices.EffectiveStatus",
         "StoredAssignmentStatusEnum": "apps.assignments.choices.AssignmentStatus",
         "AudienceTypeEnum": "apps.assignments.choices.AudienceType",
+        "AvailabilityTypeEnum": "apps.assignments.choices.AvailabilityType",
+        "ResultReviewModeEnum": "apps.assignments.choices.ResultReviewMode",
+        "TransitionActionEnum": "apps.assignments.choices.TransitionAction",
         "AttemptStatusEnum": "apps.attempts.choices.AttemptStatus",
+        "AttemptEventTypeEnum": "apps.attempts.choices.AttemptEventType",
+        "AttemptEventActionEnum": "apps.attempts.choices.AttemptEventAction",
     },
 }
 

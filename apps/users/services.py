@@ -1,10 +1,12 @@
 """Yozish (write) business logic — users."""
 
 import secrets
+from datetime import timedelta
 
 from django.contrib.auth import password_validation
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from common.exceptions import BusinessRuleError, ConflictError
@@ -77,6 +79,10 @@ def create_user(
                 full_name=full_name,
                 role=role,
                 avatar_url=avatar_url or "",
+                must_change_password=generated_password is not None,
+                temporary_password_expires_at=(
+                    timezone.now() + timedelta(hours=24) if generated_password else None
+                ),
             )
             return user, generated_password
     except IntegrityError as exc:
@@ -99,16 +105,51 @@ def update_user(user: User, **fields) -> User:
 
 
 def update_current_user(user: User, **fields) -> User:
-    allowed = {"full_name", "phone_number", "avatar_url", "language"}
+    allowed = {"full_name", "phone_number"}
     changed = [name for name in fields if name in allowed]
     for name in changed:
         value = fields[name]
-        if name == "avatar_url":
-            value = value or ""
         setattr(user, name, value)
     if changed:
         user.save(update_fields=[*changed, "updated_at"])
     return user
+
+
+def update_preferences(user: User, **fields) -> User:
+    changed = [name for name in fields if name in {"language", "theme"}]
+    for name in changed:
+        setattr(user, name, fields[name])
+    if changed:
+        user.save(update_fields=[*changed, "updated_at"])
+    return user
+
+
+def _delete_stored_file(storage, name: str) -> None:
+    if name:
+        storage.delete(name)
+
+
+@transaction.atomic
+def replace_avatar(user: User, avatar) -> User:
+    old_name = user.avatar.name
+    storage = user.avatar.storage
+    user.avatar = avatar
+    user.avatar_url = ""
+    user.save(update_fields=["avatar", "avatar_url", "updated_at"])
+    if old_name and old_name != user.avatar.name:
+        transaction.on_commit(lambda: _delete_stored_file(storage, old_name))
+    return user
+
+
+@transaction.atomic
+def delete_avatar(user: User) -> None:
+    old_name = user.avatar.name
+    storage = user.avatar.storage
+    user.avatar = ""
+    user.avatar_url = ""
+    user.save(update_fields=["avatar", "avatar_url", "updated_at"])
+    if old_name:
+        transaction.on_commit(lambda: _delete_stored_file(storage, old_name))
 
 
 @transaction.atomic
@@ -132,5 +173,14 @@ def activate_user(*, user: User) -> User:
 @transaction.atomic
 def set_user_password(*, user: User, password: str) -> None:
     user.set_password(password)
-    user.save(update_fields=["password", "updated_at"])
+    user.must_change_password = False
+    user.temporary_password_expires_at = None
+    user.save(
+        update_fields=[
+            "password",
+            "must_change_password",
+            "temporary_password_expires_at",
+            "updated_at",
+        ]
+    )
     revoke_all_tokens(user)

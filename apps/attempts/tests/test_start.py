@@ -34,14 +34,15 @@ def test_start_returns_questions_without_correct_answers(api, world):
     assert body["status"] == "IN_PROGRESS"
     assert body["assignment_id"] == str(world.assignment.id)
     assert body["duration_minutes"] == 30
-    assert [q["id"] for q in body["questions"]] == [
+    assert {q["id"] for q in body["questions"]} == {
         str(world.eq[k].id) for k in ("single", "multi", "tf", "open")
-    ]  # ExamQuestion ID lari, position tartibida
-    first = body["questions"][0]
+    }  # Tartib attempt boshida bir marta random qilinadi.
+    first = next(q for q in body["questions"] if q["id"] == str(world.eq["single"].id))
     assert first["question_id"] == str(world.q["single"].id)
     assert first["points"] == 2 and first["answer"] is None
     assert set(first["options"][0]) == {"id", "text"}
-    assert body["questions"][3]["options"] == []  # open-ended
+    open_question = next(q for q in body["questions"] if q["id"] == str(world.eq["open"].id))
+    assert open_question["options"] == []
     assert not contains_key(body, "is_correct")  # TZ 13.1
 
 
@@ -52,6 +53,41 @@ def test_deadline_is_start_plus_duration(api, world):
     assert before <= started <= timezone.now()
     assert deadline - started == timedelta(minutes=30)
     assert abs(parse_datetime(body["server_now"]) - timezone.now()) < timedelta(seconds=5)
+
+
+def test_delivery_and_grading_use_immutable_snapshot(api, make_world):
+    world = make_world(open_ended=False)
+    client = api(world.student)
+    started = client.start(world.assignment).json()
+    single_before = next(
+        question
+        for question in started["questions"]
+        if question["id"] == str(world.eq["single"].id)
+    )
+    right_id = next(
+        option["id"] for option in single_before["options"] if option["text"] == "Right"
+    )
+    single_exam_question_id = world.eq["single"].id
+
+    world.q["single"].text = "CHANGED AFTER START"
+    world.q["single"].save(update_fields=["text", "updated_at"])
+    world.q["single"].options.update(is_correct=False)
+    world.q["single"].options.filter(text="Wrong1").update(is_correct=True)
+    world.eq["single"].delete()
+
+    resumed = client.detail(started["id"]).json()
+    single_after = next(
+        question
+        for question in resumed["questions"]
+        if question["id"] == str(single_exam_question_id)
+    )
+    assert single_after["text"] == single_before["text"]
+    assert single_after["options"] == single_before["options"]
+
+    saved = client.answer(started["id"], single_exam_question_id, option_ids=[right_id])
+    assert saved.status_code == 200
+    result = client.submit(started["id"]).json()
+    assert result["score"] == 2
 
 
 def test_deadline_is_capped_by_assignment_end(api, make_world):

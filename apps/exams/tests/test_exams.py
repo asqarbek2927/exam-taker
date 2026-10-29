@@ -452,22 +452,21 @@ def test_archived_exam_cannot_be_edited(auth_client, ctx):
     assert response.status_code == 400
 
 
-def test_published_exam_content_is_locked(auth_client, ctx):
+def test_assigned_exam_template_stays_editable_because_snapshot_is_immutable(auth_client, ctx):
     exam = make_exam(ctx, status=ExamStatus.READY)
-    AssignmentFactory(exam=exam, status=AssignmentStatus.PUBLISHED, ensure_question=False)
+    assignment = AssignmentFactory(
+        exam=exam, status=AssignmentStatus.PUBLISHED, ensure_question=False
+    )
     client = auth_client(ctx["teacher"])
     url = f"{EXAMS}/{exam.id}"
 
-    assert client.get(url).json()["is_locked"] is True
-    assert client.patch(url, {"passing_score_percent": 10}, format="json").status_code == 409
-    assert client.patch(url, {"module_ids": []}, format="json").status_code == 409
-    assert client.patch(url, {"questions": []}, format="json").status_code == 409
-    assert client.patch(url, {"status": "DRAFT"}, format="json").status_code == 409
-    # title/description ruxsat etiladi
+    assert client.get(url).json()["is_locked"] is False
+    assert client.patch(url, {"passing_score_percent": 10}, format="json").status_code == 200
     assert client.patch(url, {"title": "Typo fixed"}, format="json").status_code == 200
     exam.refresh_from_db()
-    assert exam.passing_score_percent == Decimal("70")
+    assert exam.passing_score_percent == Decimal("10")
     assert exam.exam_questions.count() == 3
+    assert assignment.snapshot.passing_score_percent == Decimal("70")
 
 
 # ---------------------------- duplicate ----------------------------

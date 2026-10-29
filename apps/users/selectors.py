@@ -130,10 +130,14 @@ def _latest_graded_attempts_for_outer_student() -> QuerySet[ExamAttempt]:
 
 def student_directory() -> QuerySet[User]:
     """Student kartalari uchun enrollment va natija statistikasini tayyorlaydi."""
-    active_enrollments = Enrollment.objects.filter(
-        status=EnrollmentStatus.ACTIVE,
-        course__status=CourseStatus.ACTIVE,
-    ).select_related("course").order_by("enrolled_at")
+    active_enrollments = (
+        Enrollment.objects.filter(
+            status=EnrollmentStatus.ACTIVE,
+            course__status=CourseStatus.ACTIVE,
+        )
+        .select_related("course")
+        .order_by("enrolled_at")
+    )
     completed_assignments = (
         ExamAttempt.objects.filter(student_id=OuterRef("pk"), status__in=RESULT_STATUSES)
         .order_by()
@@ -164,9 +168,7 @@ def student_directory() -> QuerySet[User]:
                 status=EnrollmentStatus.ACTIVE,
                 course__status=CourseStatus.ACTIVE,
             ),
-            exams_taken=Coalesce(
-                Subquery(completed_assignments, output_field=IntegerField()), 0
-            ),
+            exams_taken=Coalesce(Subquery(completed_assignments, output_field=IntegerField()), 0),
             average_score=Subquery(
                 average_score,
                 output_field=DecimalField(max_digits=5, decimal_places=2),

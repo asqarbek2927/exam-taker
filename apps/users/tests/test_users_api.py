@@ -95,9 +95,7 @@ def test_admin_can_create_user_with_generated_password(api_client, auth_client, 
 
 
 @pytest.mark.parametrize("password", ["", None])
-def test_create_rejects_blank_or_null_password_when_field_is_sent(
-    auth_client, admin, password
-):
+def test_create_rejects_blank_or_null_password_when_field_is_sent(auth_client, admin, password):
     response = auth_client(admin).post(USERS, payload(password=password), format="json")
     assert response.status_code == 422
     assert "password" in response.json()["errors"]
@@ -321,6 +319,7 @@ def test_teacher_directory_returns_courses_and_card_statistics(auth_client, admi
             "id": str(teacher.id),
             "full_name": "Nodira Ismoilova",
             "email": teacher.email,
+            "username": teacher.username,
             "role": "TEACHER",
             "avatar_url": "",
             "status": "ACTIVE",
@@ -345,9 +344,7 @@ def test_teacher_directory_filters_by_course(auth_client, admin):
     matching = CourseTeacherFactory(course=selected_course).teacher
     CourseTeacherFactory()
 
-    response = auth_client(admin).get(
-        "/api/v1/teachers", {"course_id": str(selected_course.id)}
-    )
+    response = auth_client(admin).get("/api/v1/teachers", {"course_id": str(selected_course.id)})
 
     assert response.status_code == 200
     assert [item["id"] for item in response.json()["data"]] == [str(matching.id)]

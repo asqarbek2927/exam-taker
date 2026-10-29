@@ -86,9 +86,7 @@ def result_summary(qs: QuerySet[ExamAttempt]) -> dict:
         "awaiting_review": stats["awaiting_review"],
         "graded": graded,
         "average_score": (
-            round(float(stats["average_score"]), 2)
-            if stats["average_score"] is not None
-            else None
+            round(float(stats["average_score"]), 2) if stats["average_score"] is not None else None
         ),
         "grading_progress_percentage": round(graded * 100 / submissions) if submissions else 0,
     }

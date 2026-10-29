@@ -18,3 +18,17 @@ class TimeStampedModel(models.Model):
 
     class Meta:
         abstract = True
+
+
+class VersionedModel(models.Model):
+    """Optimistic locking uchun API versiyasi.
+
+    Versiyani oshirish service qatlamida, kutilgan versiya bilan atomik update
+    bajarilgan paytda amalga oshiriladi. Oddiy ``save()`` uni yashirin ravishda
+    o'zgartirmaydi — bu fixtures va admin amallarini predictible saqlaydi.
+    """
+
+    version = models.PositiveIntegerField(default=1, editable=False)
+
+    class Meta:
+        abstract = True

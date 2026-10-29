@@ -1,12 +1,12 @@
 from django.conf import settings
 from django.db import models
 
-from common.models import TimeStampedModel, UUIDModel
+from common.models import TimeStampedModel, UUIDModel, VersionedModel
 
-from .choices import QuestionStatus, QuestionType
+from .choices import QuestionDifficulty, QuestionStatus, QuestionType
 
 
-class Question(UUIDModel, TimeStampedModel):
+class Question(UUIDModel, TimeStampedModel, VersionedModel):
     course = models.ForeignKey(
         "academics.Course", on_delete=models.PROTECT, related_name="questions"
     )
@@ -17,6 +17,12 @@ class Question(UUIDModel, TimeStampedModel):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="questions"
     )
     type = models.CharField(max_length=20, choices=QuestionType.choices)
+    difficulty = models.CharField(
+        max_length=10,
+        choices=QuestionDifficulty.choices,
+        default=QuestionDifficulty.MEDIUM,
+        db_index=True,
+    )
     text = models.TextField()
     default_points = models.DecimalField(max_digits=6, decimal_places=2)
     status = models.CharField(
@@ -32,7 +38,12 @@ class Question(UUIDModel, TimeStampedModel):
         ]
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(default_points__gt=0), name="question_default_points_gt_0"
+                condition=models.Q(default_points__gte=1),
+                name="question_default_points_gte_1",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(default_points__lte=100),
+                name="question_default_points_lte_100",
             ),
         ]
 

@@ -22,6 +22,8 @@ from apps.assignments.selectors import (
     with_effective_status,
 )
 from apps.assignments.tests.factories import AssignmentFactory, add_groups, add_students
+from apps.audit.choices import AuditAction
+from apps.audit.models import AuditLog
 from apps.exams.choices import ExamStatus
 from apps.exams.tests.factories import ExamFactory, ExamQuestionFactory
 from apps.notifications.models import Notification
@@ -310,9 +312,7 @@ def test_list_other_filters_and_scoping(auth_client, ctx):
     assert client.get(URL, {"course_id": foreign.exam.course_id}).json()["data"] == []
 
 
-def test_assignment_directory_summary_is_role_scoped_and_ignores_archived(
-        auth_client, admin, ctx
-):
+def test_assignment_directory_summary_is_role_scoped_and_ignores_archived(auth_client, admin, ctx):
     now = timezone.now()
     mine = {
         "exam": ctx["exam"],
@@ -376,18 +376,17 @@ def test_archive_and_unarchive_assignment(auth_client, ctx):
         status=AssignmentStatus.COMPLETED,
         ensure_question=False,
     )
-    active = AssignmentFactory(
-        exam=ctx["exam"], published_by=ctx["teacher"], ensure_question=False
-    )
+    active = AssignmentFactory(exam=ctx["exam"], published_by=ctx["teacher"], ensure_question=False)
     client = auth_client(ctx["teacher"])
 
     archived = client.post(f"{URL}/{completed.id}/archive")
     assert archived.status_code == 200
     assert archived.json()["is_archived"] is True
     assert archived.json()["archived_at"] is not None
-    assert client.patch(
-        f"{URL}/{completed.id}", {"duration_minutes": 10}, format="json"
-    ).status_code == 400
+    assert (
+        client.patch(f"{URL}/{completed.id}", {"duration_minutes": 10}, format="json").status_code
+        == 400
+    )
     assert client.post(f"{URL}/{active.id}/archive").status_code == 400
 
     restored = client.post(f"{URL}/{completed.id}/unarchive")
@@ -537,7 +536,7 @@ def test_finished_assignments_cannot_be_edited(auth_client, ctx, stored):
     assert response.status_code == 400
 
 
-def test_assignment_with_attempts_only_allows_extending_end_at(auth_client, ctx):
+def test_assignment_with_attempts_only_allows_internal_note(auth_client, ctx):
     from apps.attempts.tests.factories import AttemptFactory
 
     assignment = AssignmentFactory(
@@ -550,18 +549,17 @@ def test_assignment_with_attempts_only_allows_extending_end_at(auth_client, ctx)
     assert client.patch(url, {"duration_minutes": 5}, format="json").status_code == 409
     assert client.patch(url, {"max_attempts": 9}, format="json").status_code == 409
     assert (
-            client.patch(url, {"audience_type": "ALL_COURSE_STUDENTS"}, format="json").status_code
-            == 409
+        client.patch(url, {"audience_type": "ALL_COURSE_STUDENTS"}, format="json").status_code
+        == 409
     )
     assert (
-            client.patch(url, {"end_at": iso(timedelta(hours=3))}, format="json").status_code == 409
+        client.patch(url, {"end_at": iso(timedelta(hours=3))}, format="json").status_code == 409
     )  # qisqartirish
 
-    extended = client.patch(url, {"end_at": iso(timedelta(days=3))}, format="json")
-    assert extended.status_code == 200
-    assert (
-            client.patch(url, {"end_at": None}, format="json").status_code == 200
-    )  # deadline olib tashlandi
+    assert client.patch(url, {"end_at": iso(timedelta(days=3))}, format="json").status_code == 409
+    changed = client.patch(url, {"internal_note": "Teacher note"}, format="json")
+    assert changed.status_code == 200
+    assert changed.json()["internal_note"] == "Teacher note"
 
 
 # ------------------------------- student view -------------------------------
@@ -604,16 +602,16 @@ def test_student_dto_and_can_start_flags(auth_client, ctx):
     dto = data[str(active.id)]
     assert set(dto) == {
         "id", "exam_id", "exam_title", "course", "start_at", "end_at", "duration_minutes",
-        "max_attempts", "status", "questions_count", "total_points", "attempts_used",
+        "availability_type", "max_attempts", "result_review_mode", "answer_review_released",
+        "status", "questions_count", "total_points", "attempts_used",
         "attempts_remaining", "active_attempt_id", "can_start",
     }  # fmt: skip
     assert dto["status"] == "ACTIVE" and dto["can_start"] is True
-    assert dto["questions_count"] == 2 and dto["total_points"] == 5
+    assert dto["questions_count"] == 1 and dto["total_points"] == 2
     assert dto["attempts_used"] == 0 and dto["attempts_remaining"] == 1
     assert data[str(paused.id)]["status"] == "PAUSED" and data[str(paused.id)]["can_start"] is False
     assert (
-        data[str(future.id)]["status"] == "SCHEDULED"
-        and data[str(future.id)]["can_start"] is False
+        data[str(future.id)]["status"] == "SCHEDULED" and data[str(future.id)]["can_start"] is False
     )
     assert data[str(future.id)]["attempts_remaining"] == 2
 
@@ -703,6 +701,127 @@ def test_group_used_by_assignment_cannot_be_deleted(auth_client, admin, ctx):
     response = auth_client(admin).delete(url)
     assert response.status_code == 409
     assert StudyGroup.objects.filter(pk=ctx["group"].pk).exists()
+
+
+# ------------------------------- TZ lifecycle contract -------------------------------
+def test_open_ended_assignment_infers_availability(auth_client, ctx):
+    response = create(auth_client(ctx["teacher"]), ctx, end_at=None)
+    assert response.status_code == 201, response.json()
+    assert response.json()["availability_type"] == "OPEN_ENDED"
+    assert response.json()["end_at"] is None
+
+
+def test_generic_transition_uses_optimistic_version(auth_client, ctx):
+    assignment = AssignmentFactory(
+        exam=ctx["exam"],
+        published_by=ctx["teacher"],
+        status=AssignmentStatus.DRAFT,
+        ensure_question=False,
+    )
+    client = auth_client(ctx["teacher"])
+    url = f"{URL}/{assignment.id}/transitions"
+
+    published = client.post(url, {"action": "PUBLISH", "version": 1}, format="json")
+    assert published.status_code == 200, published.json()
+    assert published.json()["stored_status"] == "PUBLISHED"
+    assert published.json()["version"] == 2
+    event = AuditLog.objects.get(action=AuditAction.ASSIGNMENT_TRANSITION)
+    assert event.actor == ctx["teacher"]
+    assert event.entity_id == assignment.id
+    assert event.metadata == {
+        "transition": "PUBLISH",
+        "from_status": "DRAFT",
+        "to_status": "PUBLISHED",
+        "version": 2,
+    }
+
+    stale = client.post(url, {"action": "PAUSE", "version": 1}, format="json")
+    assert stale.status_code == 409
+
+
+def test_assignment_delete_requires_zero_attempts(auth_client, ctx):
+    from apps.attempts.tests.factories import AttemptFactory
+
+    unused = AssignmentFactory(exam=ctx["exam"], published_by=ctx["teacher"], ensure_question=False)
+    used = AssignmentFactory(exam=ctx["exam"], published_by=ctx["teacher"], ensure_question=False)
+    AttemptFactory(assignment=used, student=ctx["outside"])
+    client = auth_client(ctx["teacher"])
+
+    assert client.delete(f"{URL}/{unused.id}").status_code == 204
+    assert not ExamAssignment.objects.filter(pk=unused.pk).exists()
+    deleted_event = AuditLog.objects.get(action=AuditAction.ASSIGNMENT_DELETED)
+    assert deleted_event.actor == ctx["teacher"]
+    assert deleted_event.entity_id == unused.id
+    assert client.delete(f"{URL}/{used.id}").status_code == 409
+    assert ExamAssignment.objects.filter(pk=used.pk).exists()
+
+
+def test_answer_review_release_policy_and_success(auth_client, ctx):
+    from apps.attempts.choices import AttemptStatus
+    from apps.attempts.tests.factories import AttemptFactory
+
+    assignment = AssignmentFactory(
+        exam=ctx["exam"],
+        published_by=ctx["teacher"],
+        status=AssignmentStatus.COMPLETED,
+        ensure_question=False,
+    )
+    AttemptFactory(
+        assignment=assignment,
+        student=ctx["outside"],
+        status=AttemptStatus.GRADED,
+        submitted_at=timezone.now(),
+    )
+    client = auth_client(ctx["teacher"])
+    policy_url = f"{URL}/{assignment.id}/review-policy"
+    release_url = f"{URL}/{assignment.id}/release-answer-review"
+
+    policy = client.get(policy_url)
+    assert policy.status_code == 200
+    assert policy.json() == {
+        "mode": "SCORE_ONLY",
+        "released": False,
+        "can_release": True,
+        "blocked_reasons": [],
+        "submitted_count": 1,
+        "graded_count": 1,
+        "in_progress_count": 0,
+    }
+
+    released = client.post(release_url, {"version": 1}, format="json")
+    assert released.status_code == 200, released.json()
+    assert released.json()["result_review_mode"] == "FULL_REVIEW"
+    assert released.json()["answer_review_released"] is True
+    assert released.json()["answer_review_released_by"] == str(ctx["teacher"].id)
+    assert released.json()["version"] == 2
+
+    retried = client.post(release_url, {"version": 1}, format="json")
+    assert retried.status_code == 200
+    assert retried.json()["version"] == 2
+    release_events = AuditLog.objects.filter(action=AuditAction.ANSWER_REVIEW_RELEASED)
+    assert release_events.count() == 1
+    assert release_events.get().actor == ctx["teacher"]
+
+
+def test_answer_review_release_is_blocked_while_attempt_in_progress(auth_client, ctx):
+    from apps.attempts.tests.factories import AttemptFactory
+
+    assignment = AssignmentFactory(
+        exam=ctx["exam"],
+        published_by=ctx["teacher"],
+        status=AssignmentStatus.COMPLETED,
+        ensure_question=False,
+    )
+    AttemptFactory(assignment=assignment, student=ctx["outside"])
+    client = auth_client(ctx["teacher"])
+
+    policy = client.get(f"{URL}/{assignment.id}/review-policy").json()
+    assert policy["can_release"] is False
+    assert "ATTEMPTS_IN_PROGRESS" in policy["blocked_reasons"]
+    assert (
+        client.post(f"{URL}/{assignment.id}/release-answer-review", {}, format="json").status_code
+        == 409
+    )
 
 
 def test_staff_queryset_counts_attempts_once(ctx):

@@ -24,6 +24,8 @@ from .models import ExamAttempt, StudentAnswer
 from .serializers import (
     AnswerInputSerializer,
     AnswerSerializer,
+    AttemptEventInputSerializer,
+    AttemptEventResponseSerializer,
     AttemptListSerializer,
     AttemptResultSerializer,
     AttemptStaffDetailSerializer,
@@ -73,7 +75,7 @@ class AttemptViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
     http_method_names = ["get", "post", "put", "head", "options"]
 
     def get_permissions(self):
-        if self.action in ("save_answer", "submit"):
+        if self.action in ("save_answer", "submit", "events"):
             return [IsStudent()]
         return [IsAuthenticated()]
 
@@ -97,6 +99,7 @@ class AttemptViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
         if request.user.role == UserRole.STUDENT:
             if attempt.status == AttemptStatus.IN_PROGRESS:
                 return Response(StudentAttemptSerializer(attempt).data)
+            attempt = selectors.with_answers(self.get_queryset()).get(pk=attempt.pk)
             return Response(AttemptResultSerializer(attempt).data)
         attempt = selectors.with_answers(self.get_queryset()).get(pk=attempt.pk)
         return Response(AttemptStaffDetailSerializer(attempt).data)
@@ -129,8 +132,37 @@ class AttemptViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
             exam_question_id=exam_question_id,
             option_ids=serializer.validated_data.get("option_ids"),
             text_answer=serializer.validated_data.get("text_answer"),
+            revision=serializer.validated_data.get("revision"),
         )
         return Response(AnswerSerializer(answer).data)
+
+    # --- browser integrity events ------------------------------------
+    @extend_schema(
+        tags=["attempts"],
+        request=AttemptEventInputSerializer,
+        responses={200: AttemptEventResponseSerializer},
+    )
+    @action(detail=True, methods=["post"])
+    def events(self, request, pk=None):
+        serializer = AttemptEventInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        event, attempt, event_action = services.record_attempt_event(
+            student=request.user,
+            attempt_id=pk,
+            event_type=serializer.validated_data["type"],
+            event_id=serializer.validated_data["event_id"],
+            client_at=serializer.validated_data["client_at"],
+            details=serializer.validated_data["details"],
+        )
+        payload = {
+            "event_id": event.event_id,
+            "focus_violations": attempt.focus_violations,
+            "threshold": services.FOCUS_VIOLATION_THRESHOLD,
+            "action": event_action,
+            "status": attempt.status,
+            "submission_reason": attempt.finalization_reason,
+        }
+        return Response(AttemptEventResponseSerializer(payload).data)
 
     # --- submit --------------------------------------------------------
     @extend_schema(tags=["attempts"], request=None, responses={200: AttemptResultSerializer})

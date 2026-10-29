@@ -28,7 +28,7 @@ D = Decimal
         (QuestionType.MULTIPLE_CHOICE, D("3"), {"a", "b"}, {"a"}, (False, D("1.50"))),
         (QuestionType.MULTIPLE_CHOICE, D("3"), {"a", "b"}, {"a", "w"}, (False, D("0.00"))),
         (QuestionType.MULTIPLE_CHOICE, D("3"), {"a", "b"}, {"w"}, (False, D("0.00"))),
-        (QuestionType.MULTIPLE_CHOICE, D("3"), {"a", "b"}, {"a", "b", "w"}, (False, D("1.50"))),
+        (QuestionType.MULTIPLE_CHOICE, D("3"), {"a", "b"}, {"a", "b", "w"}, (False, D("0.00"))),
         (QuestionType.MULTIPLE_CHOICE, D("3"), {"a", "b"}, set(), (False, D("0.00"))),
         (QuestionType.MULTIPLE_CHOICE, D("1"), {"a", "b", "c"}, {"a"}, (False, D("0.33"))),
         (QuestionType.MULTIPLE_CHOICE, D("1"), {"a", "b", "c"}, {"a", "b"}, (False, D("0.67"))),

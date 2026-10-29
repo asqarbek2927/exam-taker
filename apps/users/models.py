@@ -4,19 +4,24 @@ from django.db import models
 
 from common.models import TimeStampedModel, UUIDModel
 
-from .choices import UserLanguage, UserRole, UserStatus
+from .choices import UserLanguage, UserRole, UserStatus, UserTheme
 from .managers import UserManager
 
 
 class User(UUIDModel, TimeStampedModel, AbstractBaseUser, PermissionsMixin):
     full_name = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
+    username = models.CharField(max_length=150, unique=True)
     role = models.CharField(max_length=20, choices=UserRole.choices, db_index=True)
     avatar_url = models.URLField(max_length=500, blank=True)
+    avatar = models.ImageField(upload_to="avatars/%Y/%m/", blank=True)
     phone_number = models.CharField(max_length=32, blank=True)
     language = models.CharField(
         max_length=5, choices=UserLanguage.choices, default=UserLanguage.ENGLISH
     )
+    theme = models.CharField(max_length=10, choices=UserTheme.choices, default=UserTheme.SYSTEM)
+    must_change_password = models.BooleanField(default=False)
+    temporary_password_expires_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
         max_length=10, choices=UserStatus.choices, default=UserStatus.ACTIVE, db_index=True
     )

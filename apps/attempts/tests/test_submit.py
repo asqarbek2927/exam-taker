@@ -48,6 +48,7 @@ def test_perfect_objective_attempt_is_graded_and_passed(api, make_world):
     assert set(body) == {
         "id", "assignment_id", "exam_id", "exam_title", "attempt_number", "status",
         "started_at", "submitted_at", "score", "percentage", "passed",
+        "review_mode", "answer_review_released", "focus_violations", "finalization_reason",
     }  # fmt: skip
 
 
@@ -82,7 +83,7 @@ def test_unanswered_questions_get_zero_rows(api, make_world):
         (["R1"], Decimal("1.50")),
         (["R1", "W1"], Decimal("0.00")),
         (["W1"], Decimal("0.00")),
-        (["R1", "R2", "W1"], Decimal("1.50")),
+        (["R1", "R2", "W1"], Decimal("0.00")),
         ([], Decimal("0.00")),
     ],
 )
@@ -93,7 +94,10 @@ def test_multiple_choice_partial_credit(api, make_world, selection, expected):
     client.answer(attempt_id, world.eq["multi"], option_ids=ids)
     client.submit(attempt_id)
 
-    answer = StudentAnswer.objects.get(attempt_id=attempt_id, exam_question=world.eq["multi"])
+    answer = StudentAnswer.objects.get(
+        attempt_id=attempt_id,
+        attempt_question__snapshot_question__source_exam_question_id=world.eq["multi"].id,
+    )
     assert answer.points_awarded == expected
     assert answer.is_correct is (selection == ["R1", "R2"])
 
@@ -105,7 +109,10 @@ def test_open_ended_with_text_waits_for_manual_grading(api, world):
 
     assert body["status"] == "PENDING_GRADING"
     assert (body["score"], body["percentage"], body["passed"]) == (None, None, None)
-    open_answer = StudentAnswer.objects.get(attempt_id=attempt_id, exam_question=world.eq["open"])
+    open_answer = StudentAnswer.objects.get(
+        attempt_id=attempt_id,
+        attempt_question__snapshot_question__source_exam_question_id=world.eq["open"].id,
+    )
     assert open_answer.points_awarded is None and open_answer.is_correct is None
     objective = StudentAnswer.objects.filter(attempt_id=attempt_id).exclude(pk=open_answer.pk)
     assert all(a.points_awarded is not None for a in objective)  # objective baholangan
@@ -206,6 +213,78 @@ def test_student_views_after_submit_do_not_leak_answers(api, world):
         assert "questions" not in payload and "answers" not in payload
         assert not contains_key(payload, "is_correct")
     assert detail["status"] == "PENDING_GRADING"
+
+
+def test_score_only_result_never_exposes_answers(api, make_world):
+    world = make_world(open_ended=False, result_review_mode="SCORE_ONLY")
+    client, attempt_id = start(api, world)
+    answer_all_correct(client, attempt_id, world, with_open=False)
+
+    submitted = client.submit(attempt_id).json()
+    detail = client.detail(attempt_id).json()
+
+    for payload in (submitted, detail):
+        assert payload["review_mode"] == "SCORE_ONLY"
+        assert payload["answer_review_released"] is False
+        assert "answers" not in payload
+        assert not contains_key(payload, "is_correct")
+
+
+def test_after_grading_shows_own_answers_without_answer_key(api, make_world):
+    world = make_world(open_ended=False, result_review_mode="AFTER_GRADING")
+    client, attempt_id = start(api, world)
+    answer_all_correct(client, attempt_id, world, with_open=False)
+    client.submit(attempt_id)
+
+    detail = client.detail(attempt_id).json()
+
+    assert detail["review_mode"] == "AFTER_GRADING"
+    assert len(detail["answers"]) == 3
+    assert all("points_awarded" in answer for answer in detail["answers"])
+    assert not contains_key(detail, "is_correct")
+
+
+def test_after_grading_hides_answers_while_result_is_pending(api, world):
+    world.assignment.result_review_mode = "AFTER_GRADING"
+    world.assignment.save(update_fields=["result_review_mode", "updated_at"])
+    client, attempt_id = start(api, world)
+    answer_all_correct(client, attempt_id, world)
+
+    submitted = client.submit(attempt_id).json()
+
+    assert submitted["status"] == "PENDING_GRADING"
+    assert submitted["score"] is None
+    assert "answers" not in submitted
+
+
+def test_full_review_exposes_correct_options_only_after_release(auth_client, api, make_world):
+    world = make_world(open_ended=False, result_review_mode="FULL_REVIEW")
+    client, attempt_id = start(api, world)
+    answer_all_correct(client, attempt_id, world, with_open=False)
+    client.submit(attempt_id)
+
+    before_release = client.detail(attempt_id).json()
+    assert "answers" not in before_release
+    assert not contains_key(before_release, "is_correct")
+
+    world.assignment.status = "COMPLETED"
+    world.assignment.save(update_fields=["status", "updated_at"])
+    released = auth_client(world.teacher).post(
+        f"/api/v1/exam-assignments/{world.assignment.id}/release-answer-review",
+        {"version": world.assignment.version},
+        format="json",
+    )
+    assert released.status_code == 200, released.json()
+
+    detail = client.detail(attempt_id).json()
+    assert detail["answer_review_released"] is True
+    assert len(detail["answers"]) == 3
+    assert contains_key(detail, "is_correct")
+    assert any(
+        option["is_correct"]
+        for answer in detail["answers"]
+        for option in answer["question"]["options"]
+    )
 
 
 def test_staff_detail_shows_answers_and_correctness(auth_client, api, world):

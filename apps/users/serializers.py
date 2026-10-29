@@ -1,13 +1,16 @@
 import re
 
 from django.contrib.auth import password_validation
+from django.contrib.auth.models import update_last_login
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 
-from .choices import CreatableUserRole, UserLanguage
+from .choices import CreatableUserRole, UserLanguage, UserRole, UserTheme
 from .models import User
 
 
@@ -39,12 +42,15 @@ class UserBriefSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = [
             "id",
             "full_name",
             "email",
+            "username",
             "role",
             "avatar_url",
             "status",
@@ -53,11 +59,47 @@ class UserSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def get_avatar_url(self, obj: User) -> str:
+        if not obj.avatar:
+            return obj.avatar_url
+        request = self.context.get("request")
+        return request.build_absolute_uri(obj.avatar.url) if request else obj.avatar.url
+
 
 class CurrentUserSerializer(UserSerializer):
+    permissions = serializers.SerializerMethodField()
+    preferences = serializers.SerializerMethodField()
+
     class Meta(UserSerializer.Meta):
-        fields = [*UserSerializer.Meta.fields, "phone_number", "language"]
+        fields = [
+            *UserSerializer.Meta.fields,
+            "phone_number",
+            "must_change_password",
+            "permissions",
+            "preferences",
+        ]
         read_only_fields = fields
+
+    def get_permissions(self, obj: User) -> dict[str, bool]:
+        is_admin = obj.role == UserRole.SUPER_ADMIN
+        has_course = False
+        is_support_teacher = False
+        if obj.role == UserRole.TEACHER:
+            from apps.academics.choices import CourseStatus, CourseTeacherType
+
+            assignments = obj.course_assignments.filter(course__status=CourseStatus.ACTIVE)
+            has_course = assignments.exists()
+            is_support_teacher = assignments.filter(type=CourseTeacherType.SUPPORT).exists()
+        return {
+            "can_create_question": is_admin or has_course,
+            "can_create_exam": is_admin or has_course,
+            "can_assign_exam": is_admin or has_course,
+            "can_grade": is_admin or has_course,
+            "is_support_teacher": is_support_teacher,
+        }
+
+    def get_preferences(self, obj: User) -> dict[str, str]:
+        return {"language": obj.language, "theme": obj.theme}
 
 
 class UserCreateResponseSerializer(UserSerializer):
@@ -173,11 +215,7 @@ class UserCreateSerializer(serializers.Serializer):
         generate_random = attrs.get("generate_random_password", False)
         if generate_random and password_given:
             raise serializers.ValidationError(
-                {
-                    "password": [
-                        "Random parol so‘ralganda `password` yuborilmasligi kerak."
-                    ]
-                }
+                {"password": ["Random parol so‘ralganda `password` yuborilmasligi kerak."]}
             )
         if generate_given and not generate_random and not password_given:
             raise serializers.ValidationError(
@@ -205,17 +243,23 @@ class UserUpdateSerializer(serializers.Serializer):
         return value
 
 
-class CurrentUserUpdateSerializer(serializers.Serializer):
+class ProfileUpdateSerializer(serializers.Serializer):
     full_name = serializers.CharField(max_length=255, required=False)
     phone_number = serializers.RegexField(
         regex=r"^\+?[0-9][0-9\s().-]{6,31}$", required=False, allow_blank=True
     )
-    avatar_url = serializers.URLField(
-        max_length=500, required=False, allow_blank=True, allow_null=True
-    )
-    language = serializers.ChoiceField(choices=UserLanguage.choices, required=False)
 
     def validate(self, attrs):
+        forbidden = {"email", "role", "status"}.intersection(self.initial_data)
+        if forbidden:
+            raise serializers.ValidationError(
+                {name: ["Bu maydon profil orqali o‘zgartirilmaydi."] for name in forbidden}
+            )
+        user: User = self.context["user"]
+        if user.role != UserRole.SUPER_ADMIN and "full_name" in self.initial_data:
+            raise serializers.ValidationError(
+                {"full_name": ["Bu maydonni faqat Super Admin o‘zgartira oladi."]}
+            )
         if not attrs:
             raise serializers.ValidationError("Kamida bitta maydon yuboring.")
         if "phone_number" in attrs:
@@ -223,22 +267,56 @@ class CurrentUserUpdateSerializer(serializers.Serializer):
         return attrs
 
 
+# Eski importlar uchun alias; /auth/me ham shu xavfsiz qoidalardan foydalanadi.
+CurrentUserUpdateSerializer = ProfileUpdateSerializer
+
+
+class PreferencesUpdateSerializer(serializers.Serializer):
+    language = serializers.ChoiceField(choices=UserLanguage.choices, required=False)
+    theme = serializers.ChoiceField(choices=UserTheme.choices, required=False)
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError("Kamida bitta preference yuboring.")
+        return attrs
+
+
+class PreferencesSerializer(serializers.Serializer):
+    language = serializers.ChoiceField(choices=UserLanguage.choices)
+    theme = serializers.ChoiceField(choices=UserTheme.choices)
+
+
+class AvatarUploadSerializer(serializers.Serializer):
+    image = serializers.ImageField(write_only=True)
+
+    def validate_image(self, value):
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Rasm hajmi 5 MB dan oshmasligi kerak.")
+        if getattr(value, "content_type", "") not in {"image/jpeg", "image/png", "image/webp"}:
+            raise serializers.ValidationError("Faqat JPEG, PNG yoki WEBP rasm yuboring.")
+        return value
+
+
+class AvatarResponseSerializer(serializers.Serializer):
+    avatar_url = serializers.URLField(allow_blank=True)
+    updated_at = serializers.DateTimeField()
+
+
 class ChangeOwnPasswordSerializer(serializers.Serializer):
     current_password = serializers.CharField(write_only=True, trim_whitespace=False)
-    new_password = serializers.CharField(
-        write_only=True, trim_whitespace=False, max_length=128
-    )
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False, max_length=128)
     confirm_new_password = serializers.CharField(
-        write_only=True, trim_whitespace=False, max_length=128
+        write_only=True, trim_whitespace=False, max_length=128, required=False
     )
 
     def validate(self, attrs):
         user: User = self.context["user"]
         if not user.check_password(attrs["current_password"]):
-            raise serializers.ValidationError(
-                {"current_password": ["Joriy password noto‘g‘ri."]}
-            )
-        if attrs["new_password"] != attrs["confirm_new_password"]:
+            raise serializers.ValidationError({"current_password": ["Joriy password noto‘g‘ri."]})
+        if (
+            "confirm_new_password" in attrs
+            and attrs["new_password"] != attrs["confirm_new_password"]
+        ):
             raise serializers.ValidationError(
                 {"confirm_new_password": ["Yangi passwordlar mos kelmadi."]}
             )
@@ -260,17 +338,49 @@ class SetPasswordSerializer(serializers.Serializer):
 # --------------------------------------------------------------------------
 # Auth
 # --------------------------------------------------------------------------
-class LoginSerializer(TokenObtainPairSerializer):
+class LoginSerializer(serializers.Serializer):
+    emailOrUsername = serializers.CharField(required=False, trim_whitespace=True, write_only=True)
+    email_or_username = serializers.CharField(required=False, trim_whitespace=True)
+    email = serializers.EmailField(required=False, write_only=True)
+    password = serializers.CharField(write_only=True, trim_whitespace=False, required=False)
+
     default_error_messages = {
         "no_active_account": "Email yoki parol noto‘g‘ri, yoki akkaunt faol emas.",
     }
 
     def validate(self, attrs):
-        data = super().validate(attrs)
+        identifier = (
+            attrs.get("emailOrUsername")
+            or attrs.get("email_or_username")
+            or attrs.get("email")
+            or ""
+        ).strip()
+        errors = {}
+        if not identifier:
+            errors["email_or_username"] = ["Email yoki username kiriting."]
+        if not attrs.get("password"):
+            errors["password"] = ["Password kiriting."]
+        if errors:
+            raise serializers.ValidationError(errors)
+        user = User.objects.filter(email__iexact=identifier).first()
+        if user is None:
+            user = User.objects.filter(username__iexact=identifier).first()
+        if user is None or not user.is_active or not user.check_password(attrs["password"]):
+            raise AuthenticationFailed(self.error_messages["no_active_account"])
+        if (
+            user.must_change_password
+            and user.temporary_password_expires_at
+            and user.temporary_password_expires_at <= timezone.now()
+        ):
+            raise AuthenticationFailed("Vaqtinchalik parol muddati tugagan.")
+        self.user = user
+        refresh = RefreshToken.for_user(user)
+        update_last_login(None, user)
         return {
-            "user": UserBriefSerializer(self.user).data,
-            "access_token": data["access"],
-            "refresh_token": data["refresh"],
+            "user": UserBriefSerializer(user).data,
+            "access_token": str(refresh.access_token),
+            "refresh_token": str(refresh),
+            "must_change_password": user.must_change_password,
         }
 
 
@@ -278,6 +388,19 @@ class RefreshSerializer(serializers.Serializer):
     refresh_token = serializers.CharField()
 
     def validate(self, attrs):
+        try:
+            token = RefreshToken(attrs["refresh_token"])
+        except TokenError as exc:
+            raise InvalidToken(exc.args[0]) from exc
+        user = User.objects.filter(pk=token.payload.get("user_id")).first()
+        if user is None or not user.is_active:
+            raise AuthenticationFailed("Akkaunt topilmadi yoki faol emas.")
+        if (
+            user.must_change_password
+            and user.temporary_password_expires_at
+            and user.temporary_password_expires_at <= timezone.now()
+        ):
+            raise AuthenticationFailed("Vaqtinchalik parol muddati tugagan.")
         inner = TokenRefreshSerializer(data={"refresh": attrs["refresh_token"]})
         try:
             inner.is_valid(raise_exception=True)
@@ -300,6 +423,7 @@ class LoginResponseSerializer(serializers.Serializer):
     user = UserBriefSerializer()
     access_token = serializers.CharField()
     refresh_token = serializers.CharField()
+    must_change_password = serializers.BooleanField()
 
 
 class RefreshResponseSerializer(serializers.Serializer):

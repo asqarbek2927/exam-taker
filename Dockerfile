@@ -18,11 +18,11 @@ COPY . .
 # Statik fayllar build vaqtida yig‘iladi (WhiteNoise). Qiymatlar faqat build uchun.
 RUN SECRET_KEY=build-only DATABASE_URL=sqlite:////tmp/build.sqlite3 \
     python manage.py collectstatic --noinput \
-    && mkdir -p /app/data \
+    && mkdir -p /app/data /app/media \
     && chown -R app:app /app
 
 USER app
 EXPOSE 8000
 
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--access-logfile", "-"]
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--access-logfile", "-", "--error-logfile", "-"]

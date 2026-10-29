@@ -111,7 +111,8 @@ def exam_has_assignments(exam: Exam) -> bool:
 def _locking_assignments() -> QuerySet[ExamAssignment]:
     """Kontentni bloklaydigan e’lonlar: DRAFT emas yoki attempt bo‘lgan."""
     return ExamAssignment.objects.filter(
-        ~Q(status=AssignmentStatus.DRAFT) | Q(attempts__isnull=False)
+        Q(snapshot__isnull=True),
+        ~Q(status=AssignmentStatus.DRAFT) | Q(attempts__isnull=False),
     )
 
 

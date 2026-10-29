@@ -18,6 +18,12 @@ class UserLanguage(models.TextChoices):
     RUSSIAN = "ru", "Русский"
 
 
+class UserTheme(models.TextChoices):
+    LIGHT = "light", "Light"
+    DARK = "dark", "Dark"
+    SYSTEM = "system", "System"
+
+
 class CreatableUserRole(models.TextChoices):
     """API orqali yaratish mumkin bo‘lgan rollar (SUPER_ADMIN — faqat `createsuperuser`)."""
 

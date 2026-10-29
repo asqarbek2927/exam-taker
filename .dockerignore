@@ -2,10 +2,12 @@
 .github
 .venv
 venv
-.env
+.env*
+!.env.aws.example
 __pycache__
 *.pyc
 .pytest_cache
 .ruff_cache
 staticfiles
+media
 *.sqlite3

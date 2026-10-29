@@ -23,9 +23,7 @@ def _ensure_course_editable(course: Course) -> None:
 # --------------------------------------------------------------------------
 # Course
 # --------------------------------------------------------------------------
-def create_course(
-    *, name: str, description: str = "", status: str = CourseStatus.ACTIVE
-) -> Course:
+def create_course(*, name: str, description: str = "", status: str = CourseStatus.ACTIVE) -> Course:
     if status not in WRITABLE_COURSE_STATUSES:
         raise BusinessRuleError("Kurs faqat DRAFT yoki ACTIVE holatda yaratiladi.")
     return Course.objects.create(name=name, description=description, status=status)
@@ -107,9 +105,11 @@ def change_teacher_type(*, course_teacher: CourseTeacher, teacher_type: str) -> 
 
 def remove_teacher(*, course_teacher: CourseTeacher) -> None:
     _ensure_course_editable(course_teacher.course)
-    if StudyGroup.objects.filter(course=course_teacher.course).filter(
-        Q(main_teacher=course_teacher.teacher) | Q(support_teacher=course_teacher.teacher)
-    ).exists():
+    if (
+        StudyGroup.objects.filter(course=course_teacher.course)
+        .filter(Q(main_teacher=course_teacher.teacher) | Q(support_teacher=course_teacher.teacher))
+        .exists()
+    ):
         raise ConflictError("Teacher avval kurs guruhlaridan olinishi kerak.")
     course_teacher.delete()
 
@@ -265,9 +265,7 @@ def create_group(
 @transaction.atomic
 def update_group(group: StudyGroup, **fields) -> StudyGroup:
     _ensure_group_editable(group)
-    changed = [
-        name for name in ("name", "main_teacher", "support_teacher") if name in fields
-    ]
+    changed = [name for name in ("name", "main_teacher", "support_teacher") if name in fields]
     if not changed:
         return group
     main_teacher = fields.get("main_teacher", group.main_teacher)

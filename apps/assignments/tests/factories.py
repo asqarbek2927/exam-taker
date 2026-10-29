@@ -4,8 +4,9 @@ import factory
 from django.utils import timezone
 from factory.django import DjangoModelFactory
 
-from apps.assignments.choices import AssignmentStatus, AudienceType
+from apps.assignments.choices import AssignmentStatus, AudienceType, AvailabilityType
 from apps.assignments.models import ExamAssignment, ExamAssignmentGroup, ExamAssignmentStudent
+from apps.assignments.snapshots import ensure_assignment_snapshot
 from apps.exams.choices import ExamStatus
 from apps.exams.tests.factories import ExamFactory, ExamQuestionFactory
 from apps.users.tests.factories import TeacherFactory
@@ -23,6 +24,11 @@ class AssignmentFactory(DjangoModelFactory):
     audience_type = AudienceType.ALL_COURSE_STUDENTS
     start_at = factory.LazyFunction(lambda: timezone.now() - timedelta(hours=1))
     end_at = factory.LazyFunction(lambda: timezone.now() + timedelta(days=1))
+    availability_type = factory.LazyAttribute(
+        lambda obj: (
+            AvailabilityType.OPEN_ENDED if obj.end_at is None else AvailabilityType.TIME_LIMITED
+        )
+    )
     duration_minutes = 30
     max_attempts = 2
     status = AssignmentStatus.PUBLISHED
@@ -35,6 +41,8 @@ class AssignmentFactory(DjangoModelFactory):
         """Imtihonda kamida 1 ta savol bo‘lsin (`ensure_question=False` — o‘tkazib yuborish)."""
         if create and extracted is not False and not obj.exam.exam_questions.exists():
             ExamQuestionFactory(exam=obj.exam)
+        if create:
+            ensure_assignment_snapshot(obj)
 
 
 def add_groups(assignment, *groups):

@@ -13,7 +13,11 @@ def money(value: Decimal) -> Decimal:
 
 
 def grade_choice_answer(
-    question_type: str, points: Decimal, correct_ids: set, selected_ids: set
+    question_type: str,
+    points: Decimal,
+    correct_ids: set,
+    selected_ids: set,
+    all_option_ids: set | None = None,
 ) -> tuple[bool, Decimal]:
     """Tanlovli savolni baholaydi. Qaytaradi: `(is_correct, points_awarded)`.
 
@@ -28,9 +32,15 @@ def grade_choice_answer(
     if question_type == QuestionType.MULTIPLE_CHOICE:
         if not selected_ids or not correct_ids:
             return False, Decimal("0.00")
-        right = len(selected_ids & correct_ids)
-        wrong = len(selected_ids - correct_ids)
-        raw = Decimal(right - wrong) / Decimal(len(correct_ids))
+        option_ids = all_option_ids or (correct_ids | selected_ids)
+        incorrect_ids = option_ids - correct_ids
+        right_factor = Decimal(len(selected_ids & correct_ids)) / Decimal(len(correct_ids))
+        wrong_factor = (
+            Decimal(len(selected_ids & incorrect_ids)) / Decimal(len(incorrect_ids))
+            if incorrect_ids
+            else Decimal(0)
+        )
+        raw = right_factor - wrong_factor
         factor = min(Decimal(1), max(Decimal(0), raw))
         return is_exact, money(points * factor)
 

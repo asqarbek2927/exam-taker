@@ -20,7 +20,10 @@ from .serializers import (
     AssignmentDetailSerializer,
     AssignmentSerializer,
     AssignmentSummarySerializer,
+    AssignmentTransitionSerializer,
     AssignmentUpdateSerializer,
+    ReviewPolicySerializer,
+    ReviewReleaseSerializer,
     StudentAssignmentSerializer,
 )
 
@@ -61,6 +64,7 @@ class AssignmentViewSet(
     mixins.RetrieveModelMixin,
     mixins.CreateModelMixin,
     mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
     filterset_class = AssignmentFilter
@@ -69,7 +73,7 @@ class AssignmentViewSet(
     ordering = ["-start_at"]
     lookup_value_regex = UUID_REGEX
     owner_attr = "published_by_id"
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     # --- permissions ---------------------------------------------------
     def get_permissions(self):
@@ -84,7 +88,7 @@ class AssignmentViewSet(
 
     # --- queryset / serializer ----------------------------------------
     def _is_student(self) -> bool:
-        return self.request.user.role == UserRole.STUDENT
+        return getattr(self.request.user, "role", None) == UserRole.STUDENT
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
@@ -146,9 +150,15 @@ class AssignmentViewSet(
         services.update_assignment(assignment=assignment, **serializer.validated_data)
         return Response(self._detail(assignment.pk))
 
+    def destroy(self, request, *args, **kwargs):
+        services.delete_unused_assignment(assignment=self.get_object(), actor=request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     # --- status amallari ----------------------------------------------
     def _transition(self, action_name: str) -> Response:
-        assignment = services.transition(assignment=self.get_object(), action=action_name)
+        assignment = services.transition(
+            assignment=self.get_object(), action=action_name, actor=self.request.user
+        )
         return Response(self._detail(assignment.pk))
 
     @extend_schema(
@@ -194,11 +204,53 @@ class AssignmentViewSet(
         return self._transition("restore")
 
     @extend_schema(
+        tags=["exam-assignments"],
+        request=AssignmentTransitionSerializer,
+        responses={200: AssignmentDetailSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="transitions")
+    def transitions(self, request, pk=None):
+        serializer = AssignmentTransitionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        action_name = serializer.validated_data["action"].lower()
+        if action_name == "restore_draft":
+            action_name = "restore"
+        assignment = services.transition(
+            assignment=self.get_object(),
+            action=action_name,
+            expected_version=serializer.validated_data.get("version"),
+            actor=request.user,
+        )
+        return Response(self._detail(assignment.pk))
+
+    @extend_schema(tags=["exam-assignments"], responses={200: ReviewPolicySerializer})
+    @action(detail=True, methods=["get"], url_path="review-policy")
+    def review_policy(self, request, pk=None):
+        policy = services.review_policy(self.get_object())
+        return Response(ReviewPolicySerializer(policy).data)
+
+    @extend_schema(
+        tags=["exam-assignments"],
+        request=ReviewReleaseSerializer,
+        responses={200: AssignmentDetailSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="release-answer-review")
+    def release_answer_review(self, request, pk=None):
+        serializer = ReviewReleaseSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        assignment = services.release_answer_review(
+            assignment=self.get_object(),
+            released_by=request.user,
+            expected_version=serializer.validated_data.get("version"),
+        )
+        return Response(self._detail(assignment.pk))
+
+    @extend_schema(
         tags=["exam-assignments"], request=None, responses={200: AssignmentDetailSerializer}
     )
     @action(detail=True, methods=["post"])
     def archive(self, request, pk=None):
-        assignment = services.archive_assignment(assignment=self.get_object())
+        assignment = services.archive_assignment(assignment=self.get_object(), actor=request.user)
         return Response(self._detail(assignment.pk))
 
     @extend_schema(
@@ -206,7 +258,7 @@ class AssignmentViewSet(
     )
     @action(detail=True, methods=["post"])
     def unarchive(self, request, pk=None):
-        assignment = services.unarchive_assignment(assignment=self.get_object())
+        assignment = services.unarchive_assignment(assignment=self.get_object(), actor=request.user)
         return Response(self._detail(assignment.pk))
 
     # --- student: imtihonni boshlash ----------------------------------

@@ -9,9 +9,12 @@ from apps.academics.tests.factories import (
     GroupStudentFactory,
     StudyGroupFactory,
 )
+from apps.assignments.tests.factories import AssignmentFactory
 from apps.attempts.choices import AttemptStatus
 from apps.attempts.models import ExamAttempt, StudentAnswer
 from apps.attempts.tests.conftest import option_id
+from apps.audit.choices import AuditAction
+from apps.audit.models import AuditLog
 from apps.exams.tests.factories import ExamQuestionFactory
 from apps.questions.choices import QuestionType
 from apps.questions.tests.factories import QuestionFactory
@@ -47,7 +50,10 @@ def submitted(api, world):
 
 
 def open_answer(attempt, world):
-    return StudentAnswer.objects.get(attempt=attempt, exam_question=world.eq["open"])
+    return StudentAnswer.objects.get(
+        attempt=attempt,
+        attempt_question__snapshot_question__source_exam_question_id=world.eq["open"].id,
+    )
 
 
 # ------------------------------- pending list -------------------------------
@@ -180,14 +186,23 @@ def test_attempt_stays_pending_until_every_open_answer_is_graded(auth_client, ap
         points=6,
         position=5,
     )
+    assignment = AssignmentFactory(
+        exam=world.exam, published_by=world.teacher, ensure_question=False
+    )
     client = api(world.student)
-    attempt_id = client.start(world.assignment).json()["id"]
+    attempt_id = client.start(assignment).json()["id"]
     client.answer(attempt_id, world.eq["open"], text_answer="first")
     client.answer(attempt_id, second, text_answer="second")
     client.submit(attempt_id)
     teacher = auth_client(world.teacher)
-    first_answer = StudentAnswer.objects.get(attempt_id=attempt_id, exam_question=world.eq["open"])
-    second_answer = StudentAnswer.objects.get(attempt_id=attempt_id, exam_question=second)
+    first_answer = StudentAnswer.objects.get(
+        attempt_id=attempt_id,
+        attempt_question__snapshot_question__source_exam_question_id=world.eq["open"].id,
+    )
+    second_answer = StudentAnswer.objects.get(
+        attempt_id=attempt_id,
+        attempt_question__snapshot_question__source_exam_question_id=second.id,
+    )
 
     one = teacher.patch(grade_url(first_answer), {"points_awarded": 4}, format="json").json()
     assert one["attempt"]["status"] == "PENDING_GRADING" and one["attempt"]["score"] is None
@@ -254,7 +269,10 @@ def test_zero_points_is_a_valid_grade(auth_client, world, submitted):
 
 
 def test_only_open_ended_answers_can_be_graded_manually(auth_client, world, submitted):
-    objective = StudentAnswer.objects.get(attempt=submitted, exam_question=world.eq["single"])
+    objective = StudentAnswer.objects.get(
+        attempt=submitted,
+        attempt_question__snapshot_question__source_exam_question_id=world.eq["single"].id,
+    )
     response = auth_client(world.teacher).patch(
         grade_url(objective), {"points_awarded": 1}, format="json"
     )
@@ -306,3 +324,8 @@ def test_staff_detail_shows_grader_after_grading(auth_client, world, submitted):
     body = auth_client(world.teacher).get(f"/api/v1/attempts/{submitted.id}").json()
     graded = [a for a in body["answers"] if a["graded_by"]]
     assert len(graded) == 1 and graded[0]["graded_by"]["id"] == str(world.teacher.id)
+    event = AuditLog.objects.get(action=AuditAction.ANSWER_GRADED)
+    assert event.actor == world.teacher
+    assert event.entity_id == open_answer(submitted, world).id
+    assert event.metadata["attempt_id"] == str(submitted.id)
+    assert "teacher_feedback" not in event.metadata

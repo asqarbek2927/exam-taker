@@ -23,7 +23,11 @@ def _email_from(request) -> str:
         return ""
     if not hasattr(data, "get"):
         return ""
-    return str(data.get("email", "")).strip().lower()
+    return (
+        str(data.get("emailOrUsername") or data.get("email_or_username") or data.get("email", ""))
+        .strip()
+        .lower()
+    )
 
 
 class LoginRateThrottle(SimpleRateThrottle):

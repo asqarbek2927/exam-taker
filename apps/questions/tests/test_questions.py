@@ -47,20 +47,20 @@ def payload(ctx, **overrides):
     [
         ("SINGLE_CHOICE", TWO_OPTIONS, 2),
         (
-                "MULTIPLE_CHOICE",
-                [{"text": "A", "is_correct": True}, {"text": "B", "is_correct": True}],
-                3,
+            "MULTIPLE_CHOICE",
+            [{"text": "A", "is_correct": True}, {"text": "B", "is_correct": True}],
+            3,
         ),
         (
-                "TRUE_FALSE",
-                [{"text": "True", "is_correct": False}, {"text": "False", "is_correct": True}],
-                1,
+            "TRUE_FALSE",
+            [{"text": "True", "is_correct": False}, {"text": "False", "is_correct": True}],
+            1,
         ),
         ("OPEN_ENDED", [], 5),
     ],
 )
 def test_create_each_type_uses_default_points(
-        auth_client, ctx, question_type, options, expected_points
+    auth_client, ctx, question_type, options, expected_points
 ):
     response = auth_client(ctx["teacher"]).post(
         QUESTIONS, payload(ctx, type=question_type, options=options), format="json"
@@ -275,18 +275,20 @@ def test_archived_question_cannot_be_edited(auth_client, ctx):
     assert response.status_code == 400
 
 
-def test_question_in_published_exam_is_locked(auth_client, ctx):
+def test_question_in_assigned_exam_is_editable_but_snapshot_stays_unchanged(auth_client, ctx):
     locked = QuestionFactory(course=ctx["course"], module=ctx["module"], created_by=ctx["teacher"])
     free = QuestionFactory(course=ctx["course"], module=ctx["module"], created_by=ctx["teacher"])
     exam_question = ExamQuestionFactory(exam__course=ctx["course"], question=locked)
-    AssignmentFactory(exam=exam_question.exam, status=AssignmentStatus.PUBLISHED)
+    assignment = AssignmentFactory(exam=exam_question.exam, status=AssignmentStatus.PUBLISHED)
+    snapshot_text = assignment.snapshot.questions.get(source_question_id=locked.id).text
     client = auth_client(ctx["teacher"])
 
     response = client.patch(f"{QUESTIONS}/{locked.id}", {"text": "Changed"}, format="json")
-    assert response.status_code == 409
+    assert response.status_code == 200
+    assert assignment.snapshot.questions.get(source_question_id=locked.id).text == snapshot_text
     assert (
-            client.patch(f"{QUESTIONS}/{free.id}", {"text": "Changed"}, format="json").status_code
-            == 200
+        client.patch(f"{QUESTIONS}/{free.id}", {"text": "Changed"}, format="json").status_code
+        == 200
     )
 
 

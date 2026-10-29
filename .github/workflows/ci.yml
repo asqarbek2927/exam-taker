@@ -49,6 +49,10 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
+      - name: Validate AWS compose
+        run: |
+          cp .env.aws.example .env.aws
+          docker compose --env-file .env.aws -f docker-compose.aws.yml config --quiet
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:

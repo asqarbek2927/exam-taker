@@ -1,12 +1,12 @@
 from django.conf import settings
 from django.db import models
 
-from common.models import TimeStampedModel, UUIDModel
+from common.models import TimeStampedModel, UUIDModel, VersionedModel
 
 from .choices import ExamStatus
 
 
-class Exam(UUIDModel, TimeStampedModel):
+class Exam(UUIDModel, TimeStampedModel, VersionedModel):
     """Qayta ishlatiladigan imtihon kontenti. Kimga/qachon berilishi `ExamAssignment` da."""
 
     course = models.ForeignKey("academics.Course", on_delete=models.PROTECT, related_name="exams")
@@ -62,6 +62,9 @@ class ExamQuestion(UUIDModel):
         constraints = [
             models.UniqueConstraint(fields=["exam", "question"], name="uniq_exam_question"),
             models.CheckConstraint(
-                condition=models.Q(points__gt=0), name="exam_question_points_gt_0"
+                condition=models.Q(points__gte=1), name="exam_question_points_gte_1"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(points__lte=100), name="exam_question_points_lte_100"
             ),
         ]

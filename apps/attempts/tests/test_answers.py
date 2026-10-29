@@ -75,8 +75,16 @@ def test_saved_answers_are_returned_when_resuming(started, world):
 
     detail = client.detail(attempt_id).json()
     answers = {q["id"]: q["answer"] for q in detail["questions"]}
-    assert answers[str(world.eq["single"].id)] == {"option_ids": [right], "text_answer": ""}
-    assert answers[str(world.eq["open"].id)] == {"option_ids": [], "text_answer": "draft"}
+    assert answers[str(world.eq["single"].id)] == {
+        "option_ids": [right],
+        "text_answer": "",
+        "revision": 1,
+    }
+    assert answers[str(world.eq["open"].id)] == {
+        "option_ids": [],
+        "text_answer": "draft",
+        "revision": 1,
+    }
     assert answers[str(world.eq["multi"].id)] is None
 
 
@@ -109,6 +117,28 @@ def test_malformed_payloads_return_422(started, world):
     assert client.answer(attempt_id, world.eq["single"], option_ids=["nope"]).status_code == 422
     too_long = client.answer(attempt_id, world.eq["open"], text_answer="x" * 20001)
     assert too_long.status_code == 422
+
+
+def test_revision_is_required_and_prevents_stale_overwrite(started, world):
+    client, attempt_id = started
+    question = world.q["single"]
+    right = option_id(question, "Right")
+    wrong = option_id(question, "Wrong1")
+    url = f"/api/v1/attempts/{attempt_id}/answers/{world.eq['single'].id}"
+
+    missing = client.client.put(url, {"option_ids": [right]}, format="json")
+    assert missing.status_code == 422
+
+    first = client.answer(attempt_id, world.eq["single"], option_ids=[right], revision=3)
+    assert first.status_code == 200 and first.json()["revision"] == 3
+
+    retry = client.answer(attempt_id, world.eq["single"], option_ids=[right], revision=3)
+    assert retry.status_code == 200 and retry.json()["revision"] == 3
+
+    conflict = client.answer(attempt_id, world.eq["single"], option_ids=[wrong], revision=3)
+    assert conflict.status_code == 409
+    stale = client.answer(attempt_id, world.eq["single"], option_ids=[wrong], revision=2)
+    assert stale.status_code == 409
 
 
 def test_unknown_or_foreign_exam_question_returns_404(started, world, make_world):
@@ -156,11 +186,17 @@ def test_answer_after_deadline_closes_attempt_and_keeps_earlier_answers(started,
     assert attempt.status == AttemptStatus.GRADED
     assert attempt.score == 2
     assert (
-        not StudentAnswer.objects.filter(attempt=attempt, exam_question=world.eq["tf"])
+        not StudentAnswer.objects.filter(
+            attempt=attempt,
+            attempt_question__snapshot_question__source_exam_question_id=world.eq["tf"].id,
+        )
         .exclude(points_awarded=0)
         .exists()
     )
-    single = StudentAnswer.objects.get(attempt=attempt, exam_question=world.eq["single"])
+    single = StudentAnswer.objects.get(
+        attempt=attempt,
+        attempt_question__snapshot_question__source_exam_question_id=world.eq["single"].id,
+    )
     assert single.points_awarded == 2  # kechikishdan oldingi javob hisobga olindi
 
 

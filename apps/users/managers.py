@@ -1,4 +1,5 @@
 from django.contrib.auth.base_user import BaseUserManager
+from django.utils.text import slugify
 
 from .choices import UserRole
 
@@ -11,6 +12,15 @@ class UserManager(BaseUserManager):
         return super().get_by_natural_key(str(username).strip().lower())
 
     def _create_user(self, email, password, **extra_fields):
+        email = self.normalize_email(email).strip().lower() if email else email
+        if email and not extra_fields.get("username"):
+            base = slugify(email.split("@", 1)[0]).replace("-", "_") or "user"
+            candidate = base[:140]
+            suffix = 1
+            while self.model._default_manager.filter(username=candidate).exists():
+                suffix += 1
+                candidate = f"{base[: 149 - len(str(suffix))]}_{suffix}"
+            extra_fields["username"] = candidate
         if not email:
             raise ValueError("Email majburiy.")
         if not extra_fields.get("full_name"):
