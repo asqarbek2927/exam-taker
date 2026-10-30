@@ -150,8 +150,8 @@ echo "$ACC" | python3 -m json.tool
 
 Tekshiring:
 
-- response `account` va `issued_credentials`dan iborat;
-- `temporary_password` faqat shu create/reset javobida chiqadi;
+- response `account`, top-level `temporary_password` va `temporary_password_expires_at`dan iborat;
+- `temporary_password` faqat shu create/reset javobida bir marta chiqadi;
 - `account.must_change_password=true`, `version=1`;
 - `password`, `course_ids`, `group_ids` yuborilsa `422`.
 
@@ -235,7 +235,7 @@ endpointlari backward compatibility uchun saqlangan.
 ## 5. Avtomatik testlar
 
 ```bash
-make test        # PostgreSQL: 535 passed
+make test        # PostgreSQL: 538 passed
 make lint
 make schema      # OpenAPI validatsiyasi
 ```

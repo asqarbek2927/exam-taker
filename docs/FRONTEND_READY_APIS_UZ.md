@@ -120,9 +120,17 @@ Create requestda password yuborilmaydi:
 }
 ```
 
-Response `account` va `issued_credentials`dan iborat. `temporary_password` faqat create yoki
-temporary-password response'ida bir marta chiqadi, 24 soat amal qiladi va login qilganda
-`must_change_password=true` qaytadi. Rollar: `TEACHER`, `SUPPORT_TEACHER`, `STUDENT`.
+Response'da `account`, top-level `temporary_password` va `temporary_password_expires_at` qaytadi.
+Parol faqat create yoki temporary-password response'ida bir marta chiqadi, 24 soat amal qiladi va
+login qilganda `must_change_password=true` qaytadi. Rollar: `TEACHER`, `SUPPORT_TEACHER`, `STUDENT`.
+
+```json
+{
+  "account": {"id":"uuid","email":"madina@example.com","role":"STUDENT"},
+  "temporary_password":"generated-password",
+  "temporary_password_expires_at":"2026-10-31T12:00:00+05:00"
+}
+```
 
 Eski `/users` operatsiyalari olib tashlangan. Account boshqaruvi uchun faqat
 `/admin/accounts` kontrakti ishlatiladi.

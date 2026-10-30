@@ -47,19 +47,6 @@ from .serializers import (
 )
 
 
-def _issued_credentials_payload(user, password, issued_at, expires_at) -> dict:
-    return {
-        "account_id": user.pk,
-        "full_name": user.full_name,
-        "username": user.username,
-        "email": user.email,
-        "role": user.role,
-        "temporary_password": password,
-        "issued_at": issued_at,
-        "expires_at": expires_at,
-    }
-
-
 # --------------------------------------------------------------------------
 # Auth
 # --------------------------------------------------------------------------
@@ -257,14 +244,13 @@ class AdminAccountViewSet(
     def create(self, request, *args, **kwargs):
         serializer = AdminAccountCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user, password, issued_at, expires_at = services.create_admin_account(
+        user, password, _issued_at, expires_at = services.create_admin_account(
             actor=request.user, **serializer.validated_data
         )
         payload = {
             "account": AdminAccountDetailSerializer(user, context={"request": request}).data,
-            "issued_credentials": _issued_credentials_payload(
-                user, password, issued_at, expires_at
-            ),
+            "temporary_password": password,
+            "temporary_password_expires_at": expires_at,
         }
         return Response(payload, status=status.HTTP_201_CREATED)
 
@@ -316,16 +302,15 @@ class AdminAccountViewSet(
     @action(detail=True, methods=["post"], url_path="temporary-password")
     def temporary_password(self, request, pk=None):
         user = self.get_object()
-        password, issued_at, expires_at = services.issue_temporary_password(
+        password, _issued_at, expires_at = services.issue_temporary_password(
             user=user, actor=request.user
         )
         payload = {
             "account": AdminAccountDetailSerializer(
                 User.objects.get(pk=user.pk), context={"request": request}
             ).data,
-            "issued_credentials": _issued_credentials_payload(
-                user, password, issued_at, expires_at
-            ),
+            "temporary_password": password,
+            "temporary_password_expires_at": expires_at,
         }
         return Response(payload)
 

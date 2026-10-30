@@ -53,16 +53,31 @@ def test_create_returns_one_time_credentials_and_audits(auth_client, admin):
     assert body["account"]["email"] == "madina@example.com"
     assert body["account"]["must_change_password"] is True
     assert body["account"]["version"] == 1
-    credentials = body["issued_credentials"]
-    assert credentials["account_id"] == body["account"]["id"]
-    assert credentials["temporary_password"]
+    assert body["temporary_password"]
+    assert body["temporary_password_expires_at"]
 
     user = User.objects.get(pk=body["account"]["id"])
-    assert user.check_password(credentials["temporary_password"])
+    assert user.check_password(body["temporary_password"])
     assert user.phone_number == "+998901234567"
     assert user.location == "Tashkent"
     assert user.temporary_password_expires_at > timezone.now() + timedelta(hours=23)
     assert AuditLog.objects.filter(entity_id=user.pk, action=AuditAction.ACCOUNT_CREATED).exists()
+
+
+@pytest.mark.parametrize("role", ["TEACHER", "SUPPORT_TEACHER", "STUDENT"])
+def test_create_returns_top_level_temporary_password_for_every_role(auth_client, admin, role):
+    response = auth_client(admin).post(
+        ACCOUNTS,
+        create_payload(email=f"{role.lower()}@example.com", role=role),
+        format="json",
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["account"]["role"] == role
+    assert body["temporary_password"]
+    assert body["temporary_password_expires_at"]
+    user = User.objects.get(pk=body["account"]["id"])
+    assert user.check_password(body["temporary_password"])
 
 
 def test_create_rejects_password_and_assignment_fields(auth_client, admin):
@@ -201,7 +216,7 @@ def test_temporary_password_is_one_time_response_and_revokes_old_session(
     ).json()
     response = auth_client(admin).post(f"{ACCOUNTS}/{teacher.id}/temporary-password")
     assert response.status_code == 200
-    password = response.json()["issued_credentials"]["temporary_password"]
+    password = response.json()["temporary_password"]
     teacher.refresh_from_db()
     assert teacher.must_change_password is True
     assert teacher.check_password(password)

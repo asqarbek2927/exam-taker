@@ -341,20 +341,10 @@ class AdminAccountCreateSerializer(serializers.Serializer):
         return attrs
 
 
-class IssuedCredentialsSerializer(serializers.Serializer):
-    account_id = serializers.UUIDField()
-    full_name = serializers.CharField()
-    username = serializers.CharField()
-    email = serializers.EmailField()
-    role = serializers.CharField()
-    temporary_password = serializers.CharField()
-    issued_at = serializers.DateTimeField()
-    expires_at = serializers.DateTimeField()
-
-
 class AdminAccountCreateResponseSerializer(serializers.Serializer):
     account = AdminAccountDetailSerializer()
-    issued_credentials = IssuedCredentialsSerializer()
+    temporary_password = serializers.CharField()
+    temporary_password_expires_at = serializers.DateTimeField()
 
 
 class AdminAccountUpdateSerializer(serializers.Serializer):

@@ -4003,11 +4003,15 @@ components:
       properties:
         account:
           $ref: '#/components/schemas/AdminAccountDetail'
-        issued_credentials:
-          $ref: '#/components/schemas/IssuedCredentials'
+        temporary_password:
+          type: string
+        temporary_password_expires_at:
+          type: string
+          format: date-time
       required:
       - account
-      - issued_credentials
+      - temporary_password
+      - temporary_password_expires_at
     AdminAccountDetail:
       type: object
       properties:
@@ -6450,38 +6454,6 @@ components:
       required:
       - added_this_month
       - total
-    IssuedCredentials:
-      type: object
-      properties:
-        account_id:
-          type: string
-          format: uuid
-        full_name:
-          type: string
-        username:
-          type: string
-        email:
-          type: string
-          format: email
-        role:
-          type: string
-        temporary_password:
-          type: string
-        issued_at:
-          type: string
-          format: date-time
-        expires_at:
-          type: string
-          format: date-time
-      required:
-      - account_id
-      - email
-      - expires_at
-      - full_name
-      - issued_at
-      - role
-      - temporary_password
-      - username
     LoginRequest:
       type: object
       properties:
