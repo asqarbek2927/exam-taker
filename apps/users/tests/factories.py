@@ -31,6 +31,11 @@ class TeacherFactory(UserFactory):
     email = factory.Sequence(lambda n: f"teacher{n}@example.com")
 
 
+class SupportTeacherFactory(UserFactory):
+    role = UserRole.SUPPORT_TEACHER
+    email = factory.Sequence(lambda n: f"support{n}@example.com")
+
+
 class StudentFactory(UserFactory):
     role = UserRole.STUDENT
     email = factory.Sequence(lambda n: f"student{n}@example.com")

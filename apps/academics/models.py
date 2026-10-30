@@ -1,12 +1,12 @@
 from django.conf import settings
 from django.db import models
 
-from common.models import TimeStampedModel, UUIDModel
+from common.models import TimeStampedModel, UUIDModel, VersionedModel
 
 from .choices import CourseStatus, CourseTeacherType, EnrollmentStatus, GroupStatus, ModuleStatus
 
 
-class Course(UUIDModel, TimeStampedModel):
+class Course(UUIDModel, TimeStampedModel, VersionedModel):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     status = models.CharField(
@@ -69,7 +69,7 @@ class Enrollment(UUIDModel):
         return f"{self.student_id} in {self.course_id} ({self.status})"
 
 
-class StudyGroup(UUIDModel, TimeStampedModel):
+class StudyGroup(UUIDModel, TimeStampedModel, VersionedModel):
     """Kurs ichidagi o‘quv guruhi (Django `auth.Group` bilan adashmaslik uchun nomi shunday)."""
 
     course = models.ForeignKey(Course, on_delete=models.PROTECT, related_name="groups")

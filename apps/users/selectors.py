@@ -21,8 +21,24 @@ from apps.attempts.models import ExamAttempt
 from apps.exams.choices import ExamStatus
 from apps.exams.models import Exam
 
-from .choices import UserRole, UserStatus
+from .choices import EDUCATOR_ROLES, UserRole, UserStatus
 from .models import User
+
+
+def admin_accounts() -> QuerySet[User]:
+    return User.objects.all().order_by("full_name", "email")
+
+
+def admin_account_summary() -> dict[str, int]:
+    return User.objects.aggregate(
+        total=Count("pk"),
+        active=Count("pk", filter=Q(status=UserStatus.ACTIVE)),
+        inactive=Count("pk", filter=Q(status=UserStatus.INACTIVE)),
+        deleted=Count("pk", filter=Q(status=UserStatus.DELETED)),
+        teachers=Count("pk", filter=Q(role=UserRole.TEACHER)),
+        support_teachers=Count("pk", filter=Q(role=UserRole.SUPPORT_TEACHER)),
+        students=Count("pk", filter=Q(role=UserRole.STUDENT)),
+    )
 
 
 def _count_for_user(model, user_field: str, **filters):
@@ -43,7 +59,7 @@ def teacher_directory() -> QuerySet[User]:
     ).select_related("course")
 
     return (
-        User.objects.filter(role=UserRole.TEACHER)
+        User.objects.filter(role__in=EDUCATOR_ROLES)
         .annotate(
             courses_count=_count_for_user(
                 CourseTeacher,
@@ -76,14 +92,14 @@ def teacher_directory() -> QuerySet[User]:
 
 def teacher_directory_summary() -> dict:
     """Teacher directory tepasidagi umumiy ko'rsatkichlar."""
-    teacher_counts = User.objects.filter(role=UserRole.TEACHER).aggregate(
+    teacher_counts = User.objects.filter(role__in=EDUCATOR_ROLES).aggregate(
         active_teachers=Count("pk", filter=Q(status=UserStatus.ACTIVE)),
         inactive_teachers=Count("pk", filter=Q(status=UserStatus.INACTIVE)),
         total_teachers=Count("pk"),
     )
     course_assignments = CourseTeacher.objects.filter(
         course__status=CourseStatus.ACTIVE,
-        teacher__role=UserRole.TEACHER,
+        teacher__role__in=EDUCATOR_ROLES,
     ).count()
     # Join ataylab teacher kesimida sanaydi: bitta enrollment kursdagi har bir
     # teacher kartasining students_count qiymatiga bittadan qo'shiladi.
@@ -91,7 +107,7 @@ def teacher_directory_summary() -> dict:
         course__status=CourseStatus.ACTIVE,
         status=EnrollmentStatus.ACTIVE,
         student__status=UserStatus.ACTIVE,
-        course__course_teachers__teacher__role=UserRole.TEACHER,
+        course__course_teachers__teacher__role__in=EDUCATOR_ROLES,
     ).count()
 
     return {

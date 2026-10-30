@@ -3,7 +3,8 @@
 from django.db.models import Count, IntegerField, OuterRef, Prefetch, Q, QuerySet, Subquery
 from django.db.models.functions import Coalesce
 
-from apps.users.choices import UserRole
+from apps.users.choices import EDUCATOR_ROLES, UserRole, UserStatus
+from apps.users.models import User
 
 from .choices import CourseStatus, EnrollmentStatus, GroupStatus, ModuleStatus
 from .models import Course, CourseTeacher, Enrollment, GroupStudent, Module, StudyGroup
@@ -32,7 +33,7 @@ def has_course_access(user, course: Course) -> bool:
     """Super Admin yoki kursga biriktirilgan teacher (MAIN/SUPPORT) kurs kontentini boshqaradi."""
     if user.role == UserRole.SUPER_ADMIN:
         return True
-    if user.role == UserRole.TEACHER:
+    if user.role in EDUCATOR_ROLES:
         return CourseTeacher.objects.filter(course=course, teacher=user).exists()
     return False
 
@@ -43,7 +44,7 @@ def courses_visible_to(user) -> QuerySet[Course]:
     if user.role == UserRole.SUPER_ADMIN:
         return qs
     # Subquery (join emas): keyingi annotatsiyalar natijasi buzilmasligi uchun.
-    if user.role == UserRole.TEACHER:
+    if user.role in EDUCATOR_ROLES:
         return qs.filter(pk__in=CourseTeacher.objects.filter(teacher=user).values("course_id"))
     if user.role == UserRole.STUDENT:
         return qs.filter(
@@ -174,6 +175,27 @@ def group_directory() -> QuerySet[StudyGroup]:
     )
 
 
+def groups_visible_to(user) -> QuerySet[StudyGroup]:
+    """Global group directory uchun role-scoped queryset."""
+    queryset = StudyGroup.objects.all()
+    if user.role == UserRole.SUPER_ADMIN:
+        return queryset
+    if user.role in EDUCATOR_ROLES:
+        return queryset.filter(
+            Q(course__course_teachers__teacher=user)
+            | Q(main_teacher=user)
+            | Q(support_teacher=user)
+        ).distinct()
+    if user.role == UserRole.STUDENT:
+        return queryset.filter(group_students__student=user).distinct()
+    return queryset.none()
+
+
+def visible_group_directory(user) -> QuerySet[StudyGroup]:
+    visible_ids = groups_visible_to(user).values("pk")
+    return group_directory().filter(pk__in=visible_ids)
+
+
 def group_directory_summary() -> dict:
     available = Q(course__status__in=[CourseStatus.DRAFT, CourseStatus.ACTIVE])
     counts = StudyGroup.objects.aggregate(
@@ -203,3 +225,21 @@ def group_directory_summary() -> dict:
 
 def group_students(group: StudyGroup) -> QuerySet[GroupStudent]:
     return GroupStudent.objects.filter(group=group).select_related("student")
+
+
+def eligible_group_students(group: StudyGroup) -> QuerySet[User]:
+    enrolled_ids = Enrollment.objects.filter(
+        course=group.course,
+        status=EnrollmentStatus.ACTIVE,
+        student__status=UserStatus.ACTIVE,
+        student__role=UserRole.STUDENT,
+    ).values("student_id")
+    grouped_ids = GroupStudent.objects.filter(
+        group__course=group.course,
+        group__status=GroupStatus.ACTIVE,
+    ).values("student_id")
+    return (
+        User.objects.filter(pk__in=enrolled_ids)
+        .exclude(pk__in=grouped_ids)
+        .order_by("full_name", "email")
+    )

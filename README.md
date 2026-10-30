@@ -42,9 +42,10 @@ python manage.py runserver
 * Django admin: `http://localhost:8000/admin/` (faqat Super Admin)
 
 Hammasini Docker da ishga tushirish: `docker compose up --build` (lokal, http uchun
-`SECURE_SSL_REDIRECT=false` compose da qo‘yilgan). SQLite fayli `sqlite_data` Docker
-volume’da saqlanadi. Lokal ishga tushirishda `db.sqlite3` loyiha katalogida yaratiladi.
-PostgreSQL kerak bo‘lsa, `DATABASE_URL` ni PostgreSQL ulanish satriga almashtiring.
+`SECURE_SSL_REDIRECT=false` compose da qo‘yilgan). Docker compose hozir SQLite'ni `sqlite_data`
+volume'da saqlaydi. Lokal server PostgreSQL bilan ishlashi uchun `.env`da masalan
+`DATABASE_URL=postgres://<user>:<password>@localhost:5432/<database>` yozing va
+`python manage.py migrate` buyrug‘ini bajaring.
 
 ## Struktura
 
@@ -217,16 +218,16 @@ Validation xatosi — **422**:
 ## Test va sifat
 
 ```bash
-make test        # pytest (sukut bo‘yicha in-memory SQLite)
+make test        # pytest; .env dagi DATABASE_URL ishlatiladi
 make lint        # ruff check + format --check
 make schema      # OpenAPI sxemani validatsiya qilish (--fail-on-warn)
 
 # Ishlayotgan PostgreSQL serveri bilan (CI dagidek):
-DATABASE_URL=postgres://examtaker:examtaker@localhost:5432/examtaker \
+DATABASE_URL=postgres://<user>:<password>@localhost:5432/<database> \
   DJANGO_SETTINGS_MODULE=config.settings.test pytest --create-db
 ```
 
-~440 ta test (SQLite da ~437 + PostgreSQL da 3 ta parallel): auth, users, permission matritsasi, queryset scoping,
+535 ta test: auth, users, permission matritsasi, queryset scoping,
 academics, savol validatsiyasi, imtihon CRUD, edit-lock, assignment (status/transition/audience/eligibility),
 attempt (start/autosave/submit/grading/expiry/leakage), DB constraintlar, race condition, OpenAPI.
 

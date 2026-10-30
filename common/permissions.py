@@ -1,6 +1,6 @@
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
-from apps.users.choices import UserRole
+from apps.users.choices import EDUCATOR_ROLES, UserRole
 
 
 class _RolePermission(BasePermission):
@@ -20,7 +20,7 @@ class IsSuperAdmin(_RolePermission):
 
 class IsTeacher(_RolePermission):
     message = "Bu amal faqat Teacher uchun."
-    allowed_roles = frozenset({UserRole.TEACHER})
+    allowed_roles = EDUCATOR_ROLES
 
 
 class IsStudent(_RolePermission):

@@ -18,7 +18,7 @@ from django.db.models.functions import Coalesce
 from apps.academics.models import CourseTeacher
 from apps.assignments.choices import AssignmentStatus
 from apps.assignments.models import ExamAssignment
-from apps.users.choices import UserRole
+from apps.users.choices import EDUCATOR_ROLES, UserRole
 
 from .choices import ExamStatus
 from .models import Exam, ExamModule, ExamQuestion
@@ -40,7 +40,7 @@ def exams_visible_to(user) -> QuerySet[Exam]:
     qs = Exam.objects.all()
     if user.role == UserRole.SUPER_ADMIN:
         return qs
-    if user.role == UserRole.TEACHER:
+    if user.role in EDUCATOR_ROLES:
         return qs.filter(
             course_id__in=CourseTeacher.objects.filter(teacher=user).values("course_id")
         )

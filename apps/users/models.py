@@ -2,13 +2,13 @@ from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import PermissionsMixin
 from django.db import models
 
-from common.models import TimeStampedModel, UUIDModel
+from common.models import TimeStampedModel, UUIDModel, VersionedModel
 
 from .choices import UserLanguage, UserRole, UserStatus, UserTheme
 from .managers import UserManager
 
 
-class User(UUIDModel, TimeStampedModel, AbstractBaseUser, PermissionsMixin):
+class User(UUIDModel, TimeStampedModel, VersionedModel, AbstractBaseUser, PermissionsMixin):
     full_name = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
     username = models.CharField(max_length=150, unique=True)
@@ -16,6 +16,7 @@ class User(UUIDModel, TimeStampedModel, AbstractBaseUser, PermissionsMixin):
     avatar_url = models.URLField(max_length=500, blank=True)
     avatar = models.ImageField(upload_to="avatars/%Y/%m/", blank=True)
     phone_number = models.CharField(max_length=32, blank=True)
+    location = models.CharField(max_length=255, blank=True)
     language = models.CharField(
         max_length=5, choices=UserLanguage.choices, default=UserLanguage.ENGLISH
     )
@@ -25,6 +26,7 @@ class User(UUIDModel, TimeStampedModel, AbstractBaseUser, PermissionsMixin):
     status = models.CharField(
         max_length=10, choices=UserStatus.choices, default=UserStatus.ACTIVE, db_index=True
     )
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     objects = UserManager()
 

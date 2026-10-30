@@ -3,7 +3,7 @@
 from django.db.models import Prefetch, QuerySet
 
 from apps.academics.models import CourseTeacher
-from apps.users.choices import UserRole
+from apps.users.choices import EDUCATOR_ROLES, UserRole
 
 from .models import ExamAttempt, StudentAnswer, StudentAnswerOption
 
@@ -15,7 +15,7 @@ def attempts_visible_to(user) -> QuerySet[ExamAttempt]:
     )
     if user.role == UserRole.SUPER_ADMIN:
         return qs
-    if user.role == UserRole.TEACHER:
+    if user.role in EDUCATOR_ROLES:
         return qs.filter(
             assignment__exam__course_id__in=CourseTeacher.objects.filter(teacher=user).values(
                 "course_id"

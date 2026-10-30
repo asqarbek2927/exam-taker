@@ -25,7 +25,7 @@ from django.utils import timezone
 
 from apps.academics.choices import EnrollmentStatus
 from apps.academics.models import CourseTeacher, Enrollment, GroupStudent
-from apps.users.choices import UserRole, UserStatus
+from apps.users.choices import EDUCATOR_ROLES, UserRole, UserStatus
 from apps.users.models import User
 
 from .choices import AssignmentStatus, AudienceType, EffectiveStatus
@@ -78,7 +78,7 @@ def staff_visible(user) -> QuerySet[ExamAssignment]:
     qs = ExamAssignment.objects.all()
     if user.role == UserRole.SUPER_ADMIN:
         return qs
-    if user.role == UserRole.TEACHER:
+    if user.role in EDUCATOR_ROLES:
         return qs.filter(
             exam__course_id__in=CourseTeacher.objects.filter(teacher=user).values("course_id")
         )

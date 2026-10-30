@@ -1,4 +1,4 @@
-from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -18,6 +18,15 @@ from .choices import UserRole
 from .filters import PersonFilter, StudentDirectoryFilter, TeacherDirectoryFilter, UserFilter
 from .models import User
 from .serializers import (
+    AccountActivitySerializer,
+    AccountCourseSerializer,
+    AccountVersionSerializer,
+    AdminAccountCreateResponseSerializer,
+    AdminAccountCreateSerializer,
+    AdminAccountDetailSerializer,
+    AdminAccountSerializer,
+    AdminAccountStatusSerializer,
+    AdminAccountUpdateSerializer,
     AvatarResponseSerializer,
     AvatarUploadSerializer,
     ChangeOwnPasswordSerializer,
@@ -26,21 +35,29 @@ from .serializers import (
     LoginResponseSerializer,
     LoginSerializer,
     LogoutSerializer,
-    PreferencesSerializer,
-    PreferencesUpdateSerializer,
     ProfileUpdateSerializer,
     RefreshResponseSerializer,
     RefreshSerializer,
-    SetPasswordSerializer,
     StudentDirectorySerializer,
     StudentDirectorySummarySerializer,
     TeacherDirectorySerializer,
     TeacherDirectorySummarySerializer,
-    UserCreateResponseSerializer,
-    UserCreateSerializer,
+    TeachingCoursesUpdateSerializer,
     UserSerializer,
-    UserUpdateSerializer,
 )
+
+
+def _issued_credentials_payload(user, password, issued_at, expires_at) -> dict:
+    return {
+        "account_id": user.pk,
+        "full_name": user.full_name,
+        "username": user.username,
+        "email": user.email,
+        "role": user.role,
+        "temporary_password": password,
+        "issued_at": issued_at,
+        "expires_at": expires_at,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -119,7 +136,7 @@ class MeView(APIView):
         return Response(CurrentUserSerializer(request.user, context={"request": request}).data)
 
     @extend_schema(
-        tags=["auth"], request=CurrentUserUpdateSerializer, responses={200: CurrentUserSerializer}
+        exclude=True,
     )
     def patch(self, request):
         serializer = CurrentUserUpdateSerializer(
@@ -168,18 +185,6 @@ class ProfilePhotoView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-@extend_schema(tags=["profile"])
-class PreferencesView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(request=PreferencesUpdateSerializer, responses={200: PreferencesSerializer})
-    def patch(self, request):
-        serializer = PreferencesUpdateSerializer(data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        user = services.update_preferences(request.user, **serializer.validated_data)
-        return Response({"language": user.language, "theme": user.theme})
-
-
 @extend_schema(
     tags=["auth"],
     request=ChangeOwnPasswordSerializer,
@@ -198,103 +203,173 @@ class ChangeOwnPasswordView(APIView):
 
 
 # --------------------------------------------------------------------------
-# Users (Super Admin)
+# Admin accounts (TZ #10-19)
 # --------------------------------------------------------------------------
 @extend_schema_view(
-    list=extend_schema(tags=["users"]),
-    retrieve=extend_schema(tags=["users"]),
+    list=extend_schema(tags=["admin-accounts"]),
+    retrieve=extend_schema(tags=["admin-accounts"], responses={200: AdminAccountDetailSerializer}),
     create=extend_schema(
-        tags=["users"],
-        request=UserCreateSerializer,
-        responses={201: UserCreateResponseSerializer},
-        examples=[
-            OpenApiExample(
-                "Random password (avatarsiz)",
-                value={
-                    "full_name": "Ali Valiyev",
-                    "email": "ali@example.com",
-                    "generate_random_password": True,
-                    "role": "STUDENT",
-                },
-                request_only=True,
-            ),
-            OpenApiExample(
-                "Custom password (avatarsiz)",
-                value={
-                    "full_name": "Vali Aliyev",
-                    "email": "vali@example.com",
-                    "password": "Strong-Pass123!",
-                    "role": "TEACHER",
-                },
-                request_only=True,
-            ),
-        ],
+        tags=["admin-accounts"],
+        request=AdminAccountCreateSerializer,
+        responses={201: AdminAccountCreateResponseSerializer},
     ),
     partial_update=extend_schema(
-        tags=["users"], request=UserUpdateSerializer, responses={200: UserSerializer}
+        tags=["admin-accounts"],
+        request=AdminAccountUpdateSerializer,
+        responses={200: AdminAccountDetailSerializer},
+    ),
+    destroy=extend_schema(
+        tags=["admin-accounts"],
+        request=AccountVersionSerializer,
+        responses={204: OpenApiResponse(description="Account soft-delete qilindi.")},
     ),
 )
-class UserViewSet(
+class AdminAccountViewSet(
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
     mixins.CreateModelMixin,
-    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
-    """Foydalanuvchilarni boshqarish. Hard delete yo‘q — `deactivate`."""
-
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
     permission_classes = [IsSuperAdmin]
     filterset_class = UserFilter
-    search_fields = ["full_name", "email"]
-    ordering_fields = ["full_name", "email", "created_at"]
+    search_fields = ["full_name", "email", "username", "phone_number", "location"]
+    ordering_fields = ["full_name", "email", "role", "status", "created_at", "last_login"]
     ordering = ["full_name", "email"]
     lookup_value_regex = UUID_REGEX
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return User.objects.none()
+        return selectors.admin_accounts()
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return AdminAccountSerializer
+        return AdminAccountDetailSerializer
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        response.data["summary"] = selectors.admin_account_summary()
+        return response
 
     def create(self, request, *args, **kwargs):
-        serializer = UserCreateSerializer(data=request.data)
+        serializer = AdminAccountCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        fields = dict(serializer.validated_data)
-        fields.pop("generate_random_password", None)
-        user, generated_password = services.create_user(**fields)
-        data = UserCreateResponseSerializer(
-            user, context={"generated_password": generated_password}
-        ).data
-        return Response(data, status=status.HTTP_201_CREATED)
+        user, password, issued_at, expires_at = services.create_admin_account(
+            actor=request.user, **serializer.validated_data
+        )
+        payload = {
+            "account": AdminAccountDetailSerializer(user, context={"request": request}).data,
+            "issued_credentials": _issued_credentials_payload(
+                user, password, issued_at, expires_at
+            ),
+        }
+        return Response(payload, status=status.HTTP_201_CREATED)
 
     def partial_update(self, request, *args, **kwargs):
-        user = self.get_object()
-        serializer = UserUpdateSerializer(user, data=request.data, partial=True)
+        serializer = AdminAccountUpdateSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        user = services.update_user(user, **serializer.validated_data)
-        return Response(UserSerializer(user).data)
+        fields = dict(serializer.validated_data)
+        expected_version = fields.pop("version")
+        user = services.update_admin_account(
+            user=self.get_object(),
+            actor=request.user,
+            expected_version=expected_version,
+            **fields,
+        )
+        return Response(AdminAccountDetailSerializer(user, context={"request": request}).data)
 
-    @extend_schema(tags=["users"], request=None, responses={200: UserSerializer})
-    @action(detail=True, methods=["post"])
-    def activate(self, request, pk=None):
-        user = services.activate_user(user=self.get_object())
-        return Response(UserSerializer(user).data)
-
-    @extend_schema(tags=["users"], request=None, responses={200: UserSerializer})
-    @action(detail=True, methods=["post"])
-    def deactivate(self, request, pk=None):
-        user = services.deactivate_user(user=self.get_object(), acting_user=request.user)
-        return Response(UserSerializer(user).data)
+    def destroy(self, request, *args, **kwargs):
+        serializer = AccountVersionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        services.soft_delete_account(
+            user=self.get_object(),
+            actor=request.user,
+            expected_version=serializer.validated_data["version"],
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(
-        tags=["users"],
-        request=SetPasswordSerializer,
-        responses={204: OpenApiResponse(description="Parol o‘zgartirildi.")},
+        tags=["admin-accounts"],
+        request=AdminAccountStatusSerializer,
+        responses={200: AdminAccountDetailSerializer},
     )
-    @action(detail=True, methods=["post"], url_path="set-password")
-    def set_password(self, request, pk=None):
-        user = self.get_object()
-        serializer = SetPasswordSerializer(data=request.data, context={"target_user": user})
+    @action(detail=True, methods=["put"])
+    def status(self, request, pk=None):
+        serializer = AdminAccountStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        services.set_user_password(user=user, password=serializer.validated_data["password"])
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        user = services.set_admin_account_status(
+            user=self.get_object(),
+            actor=request.user,
+            new_status=serializer.validated_data["status"],
+            expected_version=serializer.validated_data["version"],
+        )
+        return Response(AdminAccountDetailSerializer(user, context={"request": request}).data)
+
+    @extend_schema(
+        tags=["admin-accounts"],
+        request=None,
+        responses={200: AdminAccountCreateResponseSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="temporary-password")
+    def temporary_password(self, request, pk=None):
+        user = self.get_object()
+        password, issued_at, expires_at = services.issue_temporary_password(
+            user=user, actor=request.user
+        )
+        payload = {
+            "account": AdminAccountDetailSerializer(
+                User.objects.get(pk=user.pk), context={"request": request}
+            ).data,
+            "issued_credentials": _issued_credentials_payload(
+                user, password, issued_at, expires_at
+            ),
+        }
+        return Response(payload)
+
+    @extend_schema(tags=["admin-accounts"], responses={200: AccountCourseSerializer(many=True)})
+    @action(detail=True, methods=["get"])
+    def courses(self, request, pk=None):
+        user = self.get_object()
+        data = AdminAccountDetailSerializer(user).get_courses(user)
+        return Response(data)
+
+    @extend_schema(
+        tags=["admin-accounts"],
+        request=TeachingCoursesUpdateSerializer,
+        responses={200: AccountCourseSerializer(many=True)},
+    )
+    @action(detail=True, methods=["put"], url_path="teaching-courses")
+    def teaching_courses(self, request, pk=None):
+        from apps.academics.models import Course
+
+        serializer = TeachingCoursesUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        fields = serializer.validated_data
+        courses = list(Course.objects.filter(pk__in=fields["course_ids"]))
+        main_courses = list(Course.objects.filter(pk__in=fields["main_course_ids"]))
+        user = services.replace_teaching_courses(
+            user=self.get_object(),
+            actor=request.user,
+            courses=courses,
+            main_courses=main_courses,
+            expected_version=fields["version"],
+        )
+        data = AdminAccountDetailSerializer(user).get_courses(user)
+        return Response(data)
+
+    @extend_schema(tags=["admin-accounts"], responses={200: AccountActivitySerializer(many=True)})
+    @action(detail=True, methods=["get"])
+    def activity(self, request, pk=None):
+        from apps.audit.models import AuditLog
+
+        user = self.get_object()
+        queryset = AuditLog.objects.filter(entity_type="account", entity_id=user.pk)
+        page = self.paginate_queryset(queryset)
+        serializer = AccountActivitySerializer(page, many=True)
+        return self.get_paginated_response(serializer.data)
 
 
 class _RoleScopedReadOnlyViewSet(

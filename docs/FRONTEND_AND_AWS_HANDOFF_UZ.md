@@ -31,10 +31,10 @@ Belgilar:
 
 | TZ bo‘limi | Holat | Frontend uchun izoh |
 | --- | --- | --- |
-| Auth va profile, #1–9 | ✅ / 🟡 | 9 ta oqim ishlaydi: login, rotate refresh, logout, me, profile, photo, password, preferences. Login `emailOrUsername`ni qabul qiladi. Response va qolgan requestlar asosan `snake_case`; telefon hali faqat qat’iy `+998XXXXXXXXX`ga normalize qilinmaydi. |
-| Admin accounts, #10–19 | 🟡 / ❌ | `/users`, `/teachers`, `/students` orqali CRUD/directory va activate/deactivate/set-password bor. Lekin `/admin/accounts/*` kontrakti, soft delete, server yaratadigan temporary-password reset, one-time `IssuedCredentials`, account activity va bulk teaching-courses aynan TZ shaklida yo‘q. |
-| Courses/modules/enrollments, #20–33 | 🟡 | Course CRUD/scoping, nested teachers/students/modules va enrollment logikasi ishlaydi. Status amallari, module reorder va `/students/me/courses` TZ pathi aynan yo‘q; student o‘z kurslarini scoped `/courses` orqali oladi. |
-| Groups, #34–41 | 🟡 | Group directory va `/courses/{course_id}/groups/...` nested CRUD/membership ishlaydi. TZ dagi alohida status va eligible-students endpointlari yo‘q; ayrim tekshiruvlar create/add service ichida bajariladi. |
+| Auth va profile, #1–9 | ✅ (product-trimmed) | Login, rotate refresh, logout, me, profile, photo va password ishlaydi. Product qarori bilan preferences, `/users` va `/auth/change-password` olib tashlangan. |
+| Admin accounts, #10–19 | ✅ | `/admin/accounts` kontrakti, one-time temporary credentials, versioned update/status, soft delete, course assignments va paged activity audit ishlaydi. `SUPPORT_TEACHER` canonical role. |
+| Courses/modules/enrollments, #20–33 | ✅ | Scoped course CRUD, status, teachers, idempotent enrollment, module status/order va `/students/me/courses` ishlaydi. |
+| Groups, #34–41 | ✅ | Global scoped directory, versioned update/status, eligible students va transactional membership endpointlari ishlaydi. |
 | Question bank, #42–48 | ✅ / 🟡 | Savol CRUD, turlar validatsiyasi, ownership, archive/restore, version va snapshot safety ishlaydi. Path `/questions`; summary `/questions/summary`. TZ dagi `PUT status`, `DELETED` tombstone va course-specific summary aynan mos emas. |
 | Reusable exam templates, #49–55 | ✅ / 🟡 | `/exams` orqali CRUD, ownership, version, archive, duplicate, summary va edit-lock ishlaydi. TZ nomi `/exam-templates`; usage va explicit status/restore endpointlari to‘liq yo‘q. |
 | Assignments, #56–64 | ✅ / 🟡 | `/exam-assignments` orqali immutable snapshot, audience, version, transitions, unused delete, review-policy va release-answer-review ishlaydi. TZ `/assignments` pathidan farq qiladi; resolved audience uchun alohida GET yo‘q. |
@@ -59,15 +59,12 @@ Belgilar:
 
 1. Butun API uchun `camelCase` request/response yoki frontend generated clientda aniq adapter.
 2. TZ pagination envelope va stable error code/requestId formati.
-3. `support_teacher`ni canonical Account role qilish yoki hozirgi course assignment type modelini
-   frontend bilan kelishish; permission flaglar hozir course assignmentdan hisoblanadi.
-4. `/admin/accounts` #10–19: temporary credentials, soft delete, activity va bulk assignments.
-5. Dedicated `/students/me/*` va `/results/attempts/*` path/DTOlari.
-6. Atomic batch manual grading endpointi (#76).
-7. Universal `Idempotency-Key` create/start/submit/grade/reset/release operatsiyalari uchun.
-8. Account/course/group kabi barcha editable DTOlarda optimistic `version`/`If-Match`.
-9. Telefonni aynan `+998` + 9 raqamga normalize qilish.
-10. Barcha UTC timestamp response’larini `Z` bilan standartlashtirish.
+3. Dedicated `/students/me/*` va `/results/attempts/*` path/DTOlari.
+4. Atomic batch manual grading endpointi (#76).
+5. Universal `Idempotency-Key` create/start/submit/grade/reset/release operatsiyalari uchun.
+6. Course/group kabi qolgan editable DTOlarda optimistic `version`/`If-Match`.
+7. Self-profile telefonini aynan `+998` + 9 raqamga normalize qilish.
+8. Barcha UTC timestamp response’larini `Z` bilan standartlashtirish.
 
 Shu sababli backend biznes logikasi katta qismi tayyor, ammo original 81-operation TZ bilan
 **drop-in contract compatibility hali 100% emas**. Frontendchi hozir integratsiyani joriy Swagger
@@ -78,8 +75,8 @@ bo‘yicha boshlashi mumkin; original TZ pathlarini hard-code qilmasligi kerak.
 | Qism | Hozirgi path |
 | --- | --- |
 | Auth | `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/me` |
-| Profile | `/profile`, `/profile/photo`, `/profile/change-password`, `/profile/preferences` |
-| Accounts | `/users`, `/teachers`, `/students` |
+| Profile | `/profile`, `/profile/photo`, `/profile/change-password` |
+| Accounts | `/admin/accounts`, `/teachers`, `/students` |
 | Academics | `/courses`, `/groups`, `/courses/{id}/teachers`, `/students`, `/modules`, `/groups` nested pathlari |
 | Questions | `/questions`, `/questions/summary` |
 | Exam library | `/exams`, `/exams/summary`, `/exams/{id}/duplicate` |
@@ -131,10 +128,15 @@ nano .env.aws
 So‘ng:
 
 ```bash
+docker compose --env-file .env.aws -f docker-compose.aws.yml config --quiet
 docker compose --env-file .env.aws -f docker-compose.aws.yml up -d --build
 docker compose --env-file .env.aws -f docker-compose.aws.yml ps
 docker compose --env-file .env.aws -f docker-compose.aws.yml logs -f web nginx
 ```
+
+Redeployda mavjud `postgres_data` volume ishlatilsa, `POSTGRES_PASSWORD`ni o‘zboshimchalik bilan
+almashtirmang: Postgres image mavjud DB user parolini environmentdan qayta o‘rnatmaydi.
+`POSTGRES_PASSWORD` va `DATABASE_URL` ichidagi password doim bir xil bo‘lishi shart.
 
 Birinchi Super Admin:
 
@@ -164,16 +166,22 @@ Ikkinchi so‘rovning `401` qaytarishi server ishlayotganini bildiradi.
 ### Yangilash
 
 ```bash
+docker compose --env-file .env.aws -f docker-compose.aws.yml exec -T db \
+  sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > examtaker-before-deploy.sql
 git pull
+docker compose --env-file .env.aws -f docker-compose.aws.yml config --quiet
 docker compose --env-file .env.aws -f docker-compose.aws.yml up -d --build
+docker compose --env-file .env.aws -f docker-compose.aws.yml ps
 docker compose --env-file .env.aws -f docker-compose.aws.yml logs --tail=100 web
+docker compose --env-file .env.aws -f docker-compose.aws.yml exec web \
+  python manage.py showmigrations --plan
 ```
 
 ### Backup
 
 ```bash
 docker compose --env-file .env.aws -f docker-compose.aws.yml exec -T db \
-  pg_dump -U examtaker examtaker > examtaker-backup.sql
+  sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > examtaker-backup.sql
 ```
 
 `postgres_data` va `media_data` volumelarini ham AWS snapshot/backup siyosatiga kiriting.

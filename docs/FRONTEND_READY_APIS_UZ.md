@@ -3,7 +3,7 @@
 Yangilangan sana: 2026-10-29
 
 Ushbu faylda faqat hozirgi backendda mavjud, OpenAPI schema'ga kirgan va umumiy regressiya
-testlaridan o‘tgan endpointlar berilgan. Jami: **113 ta method/path operatsiya**.
+testlaridan o‘tgan endpointlar berilgan. Jami: **123 ta method/path operatsiya**.
 
 > Muhim: bu ro‘yxat backendning **amaldagi kontrakti**. Original TZ dagi ayrim path va DTO nomlari
 > boshqacha. Frontend aynan shu fayl va serverdagi Swagger asosida integratsiya qilishi kerak.
@@ -37,15 +37,16 @@ Rollar:
 | POST | `/auth/login` | Public | Email yoki username bilan login |
 | POST | `/auth/refresh` | Public + refresh token | Access/refresh rotation |
 | POST | `/auth/logout` | Auth | Refresh tokenni blacklist qilish |
-| GET | `/auth/me` | Auth | Account, permission flags va preferences |
-| PATCH | `/auth/me` | Auth | Eski profile aliasi |
-| POST | `/auth/change-password` | Auth | Eski password-change aliasi |
+| GET | `/auth/me` | Auth | Account va permission flaglari |
 | GET | `/profile` | Auth | Joriy profil |
 | PATCH | `/profile` | Auth | Phone; Admin uchun full name ham |
 | POST | `/profile/photo` | Auth | Multipart avatar upload |
 | DELETE | `/profile/photo` | Auth | Avatarni o‘chirish |
 | POST | `/profile/change-password` | Auth | Parolni o‘zgartirish va refresh sessionlarni bekor qilish |
-| PATCH | `/profile/preferences` | Auth | `language` va `theme` |
+
+Avatar `POST /profile/photo` orqali `multipart/form-data` formatida, canonical `image` kaliti bilan
+yuboriladi. Eski klientlarning `avatar` kaliti ham qabul qilinadi. Endpoint barcha autentifikatsiya
+qilingan rollar (`SUPER_ADMIN`, `TEACHER`, `SUPPORT_TEACHER`, `STUDENT`) uchun bir xil ishlaydi.
 
 Login request:
 
@@ -90,13 +91,16 @@ Bu endpointlarning hammasi faqat `SUPER_ADMIN` uchun.
 
 | Method | Path | Vazifa |
 | --- | --- | --- |
-| GET | `/users` | Accountlar ro‘yxati |
-| POST | `/users` | Teacher yoki student yaratish |
-| GET | `/users/{id}` | Account detail |
-| PATCH | `/users/{id}` | Accountni tahrirlash |
-| POST | `/users/{id}/activate` | Accountni faollashtirish |
-| POST | `/users/{id}/deactivate` | Accountni nofaol qilish va tokenlarni bekor qilish |
-| POST | `/users/{id}/set-password` | Admin tomonidan yangi parol o‘rnatish |
+| GET | `/admin/accounts` | Role/status/search filterli account directory va summary |
+| POST | `/admin/accounts` | Server-generated temporary credential bilan account yaratish |
+| GET | `/admin/accounts/{id}` | Courses, groups, exam stats va last activity bilan detail |
+| PATCH | `/admin/accounts/{id}` | Name/phone/locationni optimistic version bilan tahrirlash |
+| PUT | `/admin/accounts/{id}/status` | `ACTIVE/INACTIVE`, session revoke bilan |
+| DELETE | `/admin/accounts/{id}` | Soft delete; tarixiy attempt/result saqlanadi |
+| POST | `/admin/accounts/{id}/temporary-password` | Yangi bir martalik temporary password |
+| GET | `/admin/accounts/{id}/courses` | Role-specific enrolled/teaching courses |
+| PUT | `/admin/accounts/{id}/teaching-courses` | Teacher course assignmentlarini transactionally almashtirish |
+| GET | `/admin/accounts/{id}/activity` | Real paged account audit log |
 | GET | `/teachers` | Teacher directory |
 | GET | `/teachers/{id}` | Teacher detail/statistika |
 | GET | `/teachers/summary` | Teacher summary kartalari |
@@ -104,19 +108,24 @@ Bu endpointlarning hammasi faqat `SUPER_ADMIN` uchun.
 | GET | `/students/{id}` | Student detail/statistika |
 | GET | `/students/summary` | Student summary kartalari |
 
-User create ikki usulni qo‘llaydi:
+Create requestda password yuborilmaydi:
 
 ```json
 {
-  "full_name":"Ali Valiyev",
-  "email":"ali@example.com",
+  "full_name":"Madina Karimova",
+  "email":"madina@example.com",
   "role":"STUDENT",
-  "generate_random_password":true
+  "phone_number":"+998901234567",
+  "location":"Tashkent"
 }
 ```
 
-yoki `generate_random_password` o‘rniga kuchli `password` yuboriladi. Random parol response'da
-faqat bir marta `generated_password` sifatida qaytadi va userga `must_change_password=true` qo‘yiladi.
+Response `account` va `issued_credentials`dan iborat. `temporary_password` faqat create yoki
+temporary-password response'ida bir marta chiqadi, 24 soat amal qiladi va login qilganda
+`must_change_password=true` qaytadi. Rollar: `TEACHER`, `SUPPORT_TEACHER`, `STUDENT`.
+
+Eski `/users` operatsiyalari olib tashlangan. Account boshqaruvi uchun faqat
+`/admin/accounts` kontrakti ishlatiladi.
 
 ## 3. Courses — tayyor
 
@@ -126,6 +135,7 @@ faqat bir marta `generated_password` sifatida qaytadi va userga `must_change_pas
 | POST | `/courses` | Admin | Course yaratish |
 | GET | `/courses/{id}` | Auth, scoped | Course detail |
 | PATCH | `/courses/{id}` | Admin | Course tahrirlash |
+| PUT | `/courses/{id}/status` | Admin | `DRAFT/ACTIVE/ARCHIVED` transition; optional optimistic `version` |
 | POST | `/courses/{id}/archive` | Admin | Course archive |
 | POST | `/courses/{id}/restore` | Admin | Course restore |
 | GET | `/courses/summary` | Admin | Course catalog summary |
@@ -142,6 +152,9 @@ faqat bir marta `generated_password` sifatida qaytadi va userga `must_change_pas
 | POST | `/courses/{course_pk}/students` | Admin | Student enrollment |
 | PATCH | `/courses/{course_pk}/students/{id}` | Admin | Enrollment statusini o‘zgartirish |
 | DELETE | `/courses/{course_pk}/students/{id}` | Admin | Studentni course'dan chiqarish |
+| POST | `/courses/{course_pk}/enrollments` | Admin | TZ alias: `studentId` bilan ACTIVE kursga idempotent enrollment |
+| DELETE | `/courses/{course_pk}/enrollments/{student_id}` | Admin | TZ alias: student ID bilan course'dan chiqarish |
+| GET | `/students/me/courses` | Student | O‘z enrolled course kartalari, teacher/module/next-step bilan |
 
 Enrollment `DELETE` tarixni hard-delete qilmaydi; membershipni `REMOVED` holatiga o‘tkazadi va
 course ichidagi faol group membershipni ham olib tashlaydi.
@@ -154,18 +167,25 @@ course ichidagi faol group membershipni ham olib tashlaydi.
 | POST | `/courses/{course_pk}/modules` | Admin/Teacher scoped | Module yaratish |
 | GET | `/courses/{course_pk}/modules/{id}` | Auth, scoped | Module detail |
 | PATCH | `/courses/{course_pk}/modules/{id}` | Admin/Teacher scoped | Module tahrirlash |
+| PUT | `/courses/{course_pk}/modules/{id}/status` | Admin/Teacher scoped | `ACTIVE/ARCHIVED` holatini o‘zgartirish |
+| PUT | `/courses/{course_pk}/modules/order` | Admin/Teacher scoped | `moduleIds` aniq to‘plamini transactionally tartiblash |
 | DELETE | `/courses/{course_pk}/modules/{id}` | Admin/Teacher scoped | Ishlatilmagan bo‘lsa delete, aks holda archive |
 
 ## 6. Groups — tayyor
 
-Admin directory:
+Global scoped directory: Admin barcha guruhlarni, educator assigned course/guruhlarni, student esa
+faqat o‘z guruhlarini ko‘radi. Mutationlar faqat Admin uchun.
 
 | Method | Path | Vazifa |
 | --- | --- | --- |
-| GET | `/groups` | Barcha grouplar |
+| GET | `/groups` | `courseId,status,q` filterli scoped group kartalari |
 | POST | `/groups` | Group yaratish |
-| GET | `/groups/{id}` | Group detail |
-| PATCH | `/groups/{id}` | Group tahrirlash |
+| GET | `/groups/{id}` | Scoped detail; staff uchun roster, student uchun privacy-safe DTO |
+| PATCH | `/groups/{id}` | Teacher/name va optimistic `version` bilan tahrirlash |
+| PUT | `/groups/{id}/status` | `ACTIVE/ARCHIVED`; restore paytida active-group konflikti tekshiriladi |
+| GET | `/groups/{id}/eligible-students` | Faol, enrolled va boshqa active guruhga kirmagan studentlar |
+| POST | `/groups/{id}/students` | `studentId` bilan transactional membership yaratish |
+| DELETE | `/groups/{id}/students/{student_id}` | Membershipni o‘chirish; attempt/result saqlanadi |
 | POST | `/groups/{id}/archive` | Group archive |
 | POST | `/groups/{id}/restore` | Group restore |
 | GET | `/groups/summary` | Group summary |

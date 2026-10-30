@@ -30,7 +30,7 @@ from apps.exams.choices import ExamStatus
 from apps.exams.models import Exam
 from apps.questions.choices import QuestionStatus, QuestionType
 from apps.questions.models import Question
-from apps.users.choices import UserRole, UserStatus
+from apps.users.choices import EDUCATOR_ROLES, UserRole, UserStatus
 from apps.users.models import User
 
 RESULT_STATUSES = (AttemptStatus.SUBMITTED, AttemptStatus.PENDING_GRADING, AttemptStatus.GRADED)
@@ -200,8 +200,8 @@ def dashboard_summary(now: datetime) -> dict:
     users = User.objects.aggregate(
         total_students=Count("pk", filter=Q(role=UserRole.STUDENT, status=UserStatus.ACTIVE)),
         new_students=Count("pk", filter=Q(role=UserRole.STUDENT, created_at__gte=month_start)),
-        total_teachers=Count("pk", filter=Q(role=UserRole.TEACHER, status=UserStatus.ACTIVE)),
-        new_teachers=Count("pk", filter=Q(role=UserRole.TEACHER, created_at__gte=month_start)),
+        total_teachers=Count("pk", filter=Q(role__in=EDUCATOR_ROLES, status=UserStatus.ACTIVE)),
+        new_teachers=Count("pk", filter=Q(role__in=EDUCATOR_ROLES, created_at__gte=month_start)),
     )
     courses = Course.objects.aggregate(
         total=Count("pk"), active=Count("pk", filter=Q(status=CourseStatus.ACTIVE))
@@ -383,7 +383,7 @@ def exam_statistics() -> dict:
 
 def platform_activity(limit: int = 10) -> list[dict]:
     events = []
-    for user in User.objects.filter(role=UserRole.TEACHER).order_by("-created_at")[:limit]:
+    for user in User.objects.filter(role__in=EDUCATOR_ROLES).order_by("-created_at")[:limit]:
         events.append(
             {
                 "type": "TEACHER_JOINED",

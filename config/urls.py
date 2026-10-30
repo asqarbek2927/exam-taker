@@ -5,7 +5,7 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
-from apps.academics.urls import courses_router, groups_router
+from apps.academics.urls import courses_router, groups_router, student_urlpatterns
 from apps.academics.urls import router as academics_router
 from apps.assignments.urls import router as assignments_router
 from apps.attempts.urls import grading_urlpatterns
@@ -31,6 +31,7 @@ api_v1_patterns = [
     *auth_urlpatterns,
     *grading_urlpatterns,
     *reports_urlpatterns,
+    *student_urlpatterns,
     path("", include(api_router.urls)),
     path("", include(courses_router.urls)),
     path("", include(groups_router.urls)),

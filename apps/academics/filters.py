@@ -1,4 +1,5 @@
 import django_filters
+from django.db.models import Q
 
 from .choices import CourseStatus, EnrollmentStatus, GroupStatus, ModuleStatus
 from .models import Course, CourseTeacher, Enrollment, Module, StudyGroup
@@ -7,10 +8,15 @@ from .models import Course, CourseTeacher, Enrollment, Module, StudyGroup
 class CourseFilter(django_filters.FilterSet):
     status = django_filters.ChoiceFilter(choices=CourseStatus.choices)
     teacher_id = django_filters.UUIDFilter(field_name="course_teachers__teacher_id")
+    teacherId = django_filters.UUIDFilter(field_name="course_teachers__teacher_id")
+    q = django_filters.CharFilter(method="filter_q")
+
+    def filter_q(self, queryset, _name, value):
+        return queryset.filter(Q(name__icontains=value) | Q(description__icontains=value))
 
     class Meta:
         model = Course
-        fields = ["status", "teacher_id"]
+        fields = ["status", "teacher_id", "teacherId", "q"]
 
 
 class CourseTeacherFilter(django_filters.FilterSet):
@@ -39,8 +45,13 @@ class ModuleFilter(django_filters.FilterSet):
 
 class GroupDirectoryFilter(django_filters.FilterSet):
     course_id = django_filters.UUIDFilter(field_name="course_id")
+    courseId = django_filters.UUIDFilter(field_name="course_id")
     status = django_filters.ChoiceFilter(choices=GroupStatus.choices)
+    q = django_filters.CharFilter(method="filter_q")
+
+    def filter_q(self, queryset, _name, value):
+        return queryset.filter(Q(name__icontains=value) | Q(course__name__icontains=value))
 
     class Meta:
         model = StudyGroup
-        fields = ["course_id", "status"]
+        fields = ["course_id", "courseId", "status", "q"]

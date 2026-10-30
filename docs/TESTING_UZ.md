@@ -58,7 +58,7 @@ Qisqartirish uchun: `B=http://localhost:8000/api/v1`, `login` funksiyasi:
 ```bash
 B=http://localhost:8000/api/v1
 login() { curl -s -X POST $B/auth/login -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$1\",\"password\":\"Demo-Pass-123!\"}" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])"; }
+  -d "{\"emailOrUsername\":\"$1\",\"password\":\"Demo-Pass-123!\"}" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])"; }
 SH="Authorization: Bearer $(login student3@examtaker.local)"   # student
 TH="Authorization: Bearer $(login teacher1@examtaker.local)"   # teacher
 AH="Authorization: Bearer $(login admin@examtaker.local)"      # admin
@@ -67,12 +67,20 @@ AH="Authorization: Bearer $(login admin@examtaker.local)"      # admin
 ### 1–2. Auth, Users, Academics (Super Admin)
 ```bash
 curl -s $B/auth/me -H "$AH"
-curl -s -X POST $B/users -H "$AH" -H 'Content-Type: application/json' \
-  -d '{"full_name":"Yangi Student","email":"new@examtaker.local","password":"Str0ng-Pass!word1","role":"STUDENT"}'
+curl -s "$B/admin/accounts?role=SUPPORT_TEACHER" -H "$AH"
 curl -s "$B/courses" -H "$AH"                       # counts: teachers/students/groups/modules/questions/exams
 curl -s "$B/students?search=sardor" -H "$AH"
 ```
-Kutiladigan: Teacher `GET /users` → **403**; tokensiz → **401**; validation xatosi → **422** (`errors` bilan).
+Kutiladigan: Teacher `GET /admin/accounts` → **403**; tokensiz → **401**; validation xatosi → **422** (`errors` bilan).
+
+Avatar barcha rollar uchun bir xil endpoint orqali multipart yuboriladi:
+
+```bash
+curl -s -X POST $B/profile/photo -H "$SH" -F "image=@avatar.png"
+curl -s $B/profile -H "$SH"                         # avatar_url saqlangan URL
+```
+
+Canonical multipart kaliti `image`; eski frontend yuboradigan `avatar` kaliti ham qabul qilinadi.
 
 ### 3. Student o‘z e’lonlarini ko‘radi
 ```bash
@@ -130,15 +138,109 @@ Har dashboard faqat o‘z roliga (boshqasida **403**). Qiymatlar ta’riflari �
   Brauzer yopilgan holat uchun: `python manage.py finalize_expired_attempts` (docker da `finalizer` servisi o‘zi qiladi).
 * **Xatolik formati:** hamma xato `{status_code, error, message}` (422 da `errors` bilan).
 
+### 9. TZ Admin Accounts (#10–19)
+
+Account yaratish — admin parol yubormaydi; server temporary password beradi:
+
+```bash
+ACC=$(curl -s -X POST $B/admin/accounts -H "$AH" -H 'Content-Type: application/json' \
+  -d '{"full_name":"Madina Karimova","email":"madina@example.com","role":"STUDENT","phone_number":"+998901234567","location":"Tashkent"}')
+echo "$ACC" | python3 -m json.tool
+```
+
+Tekshiring:
+
+- response `account` va `issued_credentials`dan iborat;
+- `temporary_password` faqat shu create/reset javobida chiqadi;
+- `account.must_change_password=true`, `version=1`;
+- `password`, `course_ids`, `group_ids` yuborilsa `422`.
+
+Keyingi amallar (`ID` va `VERSION`ni response’dan oling):
+
+```bash
+ID=<account id>; VERSION=1
+curl -s $B/admin/accounts/$ID -H "$AH"
+curl -s -X PATCH $B/admin/accounts/$ID -H "$AH" -H 'Content-Type: application/json' \
+  -d "{\"full_name\":\"Madina K.\",\"location\":\"Samarkand\",\"version\":$VERSION}"
+curl -s -X PUT $B/admin/accounts/$ID/status -H "$AH" -H 'Content-Type: application/json' \
+  -d '{"status":"INACTIVE","version":2}'
+curl -s -X POST $B/admin/accounts/$ID/temporary-password -H "$AH"
+curl -s $B/admin/accounts/$ID/courses -H "$AH"
+curl -s $B/admin/accounts/$ID/activity -H "$AH"
+```
+
+Teacher course assignmentini transactionally almashtirish:
+
+```bash
+TID=<teacher account id>; TVERSION=<current version>
+curl -s -X PUT $B/admin/accounts/$TID/teaching-courses -H "$AH" \
+  -H 'Content-Type: application/json' \
+  -d "{\"course_ids\":[\"<course id>\"],\"main_course_ids\":[\"<course id>\"],\"version\":$TVERSION}"
+```
+
+`SUPPORT_TEACHER` uchun `main_course_ids` bo‘sh bo‘lishi shart. Eski `version` yuborilsa
+`409 VERSION_CONFLICT`. Soft delete:
+
+```bash
+curl -s -X DELETE $B/admin/accounts/$ID -H "$AH" -H 'Content-Type: application/json' \
+  -d '{"version":<current version>}'
+```
+
+Delete hard-delete emas: status `DELETED`, tarixiy attempt/result saqlanadi, login va refresh bloklanadi.
+Faol guruhning MAIN teacheri avval boshqa teacherga o‘tkazilmasa delete `409` qaytaradi.
+
+### 10. TZ Courses, Modules va Enrollments (#20–33)
+
+```bash
+CID=<course id>; SID=<student id>; MID=<module id>
+curl -s "$B/courses?q=python&status=ACTIVE&teacherId=<teacher id>" -H "$AH"
+curl -s -X PUT $B/courses/$CID/status -H "$AH" -H 'Content-Type: application/json' \
+  -d '{"status":"ACTIVE","version":1}'
+curl -s -X PUT $B/courses/$CID/modules/$MID/status -H "$TH" \
+  -H 'Content-Type: application/json' -d '{"status":"ARCHIVED"}'
+curl -s -X PUT $B/courses/$CID/modules/order -H "$TH" \
+  -H 'Content-Type: application/json' -d '{"moduleIds":["<module-1>","<module-2>"]}'
+curl -s -X POST $B/courses/$CID/enrollments -H "$AH" \
+  -H 'Content-Type: application/json' -d "{\"studentId\":\"$SID\"}"
+curl -s -X DELETE $B/courses/$CID/enrollments/$SID -H "$AH"
+curl -s $B/students/me/courses -H "$SH"
+```
+
+`moduleIds` kursdagi barcha modullarning takrorlanmagan aniq to‘plami bo‘lishi kerak. Enrollment
+faqat `ACTIVE` kurs va faol student uchun; takroriy POST bir xil representation qaytaradi. Eski
+`/courses/{id}/students` endpointlari backward compatibility uchun ishlashda davom etadi.
+
+### 11. TZ Groups (#34–41)
+
+```bash
+GID=<group id>; SID=<student id>; GVERSION=1
+curl -s "$B/groups?courseId=$CID&status=ACTIVE&q=backend" -H "$AH"
+curl -s -X POST $B/groups -H "$AH" -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Backend A\",\"courseId\":\"$CID\",\"status\":\"ACTIVE\"}"
+curl -s -X PATCH $B/groups/$GID -H "$AH" -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Backend B\",\"version\":$GVERSION}"
+curl -s -X PUT $B/groups/$GID/status -H "$AH" -H 'Content-Type: application/json' \
+  -d '{"status":"ARCHIVED","version":2}'
+curl -s "$B/groups/$GID/eligible-students?q=madina" -H "$AH"
+curl -s -X POST $B/groups/$GID/students -H "$AH" -H 'Content-Type: application/json' \
+  -d "{\"studentId\":\"$SID\"}"
+curl -s -X DELETE $B/groups/$GID/students/$SID -H "$AH"
+```
+
+Student guruhga qo‘shilishidan oldin shu kursga `ACTIVE` enrollmentga ega bo‘lishi kerak. Group va
+course ham `ACTIVE` bo‘ladi. Bir student bir kursda faqat bitta `ACTIVE` guruhda bo‘lishi mumkin;
+archive qilingan guruhni restore qilishda ham shu qoida tekshiriladi. Eski course-nested group
+endpointlari backward compatibility uchun saqlangan.
+
 ## 5. Avtomatik testlar
 
 ```bash
-make test        # ~440 ta test
+make test        # PostgreSQL: 535 passed
 make lint
 make schema      # OpenAPI validatsiyasi
 ```
 Ishlayotgan PostgreSQL serveri bilan (parallel/race testlari ham ishlaydi):
 ```bash
-DATABASE_URL=postgres://examtaker:examtaker@localhost:5432/examtaker \
+DATABASE_URL=postgres://<user>:<password>@localhost:5432/<database> \
   DJANGO_SETTINGS_MODULE=config.settings.test pytest --create-db
 ```

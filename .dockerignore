@@ -1,5 +1,6 @@
-    .git
+.git
 .github
+.idea
 .venv
 venv
 .env*
@@ -8,6 +9,8 @@ __pycache__
 *.pyc
 .pytest_cache
 .ruff_cache
+.coverage
+htmlcov
 staticfiles
 media
 *.sqlite3

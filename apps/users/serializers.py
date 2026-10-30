@@ -10,7 +10,12 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .choices import CreatableUserRole, UserLanguage, UserRole, UserTheme
+from .choices import (
+    EDUCATOR_ROLES,
+    CreatableUserRole,
+    UserRole,
+    UserStatus,
+)
 from .models import User
 
 
@@ -68,7 +73,6 @@ class UserSerializer(serializers.ModelSerializer):
 
 class CurrentUserSerializer(UserSerializer):
     permissions = serializers.SerializerMethodField()
-    preferences = serializers.SerializerMethodField()
 
     class Meta(UserSerializer.Meta):
         fields = [
@@ -76,7 +80,6 @@ class CurrentUserSerializer(UserSerializer):
             "phone_number",
             "must_change_password",
             "permissions",
-            "preferences",
         ]
         read_only_fields = fields
 
@@ -84,7 +87,7 @@ class CurrentUserSerializer(UserSerializer):
         is_admin = obj.role == UserRole.SUPER_ADMIN
         has_course = False
         is_support_teacher = False
-        if obj.role == UserRole.TEACHER:
+        if obj.role in EDUCATOR_ROLES:
             from apps.academics.choices import CourseStatus, CourseTeacherType
 
             assignments = obj.course_assignments.filter(course__status=CourseStatus.ACTIVE)
@@ -97,22 +100,6 @@ class CurrentUserSerializer(UserSerializer):
             "can_grade": is_admin or has_course,
             "is_support_teacher": is_support_teacher,
         }
-
-    def get_preferences(self, obj: User) -> dict[str, str]:
-        return {"language": obj.language, "theme": obj.theme}
-
-
-class UserCreateResponseSerializer(UserSerializer):
-    """`generated_password` faqat create javobida bir marta ko‘rsatiladi."""
-
-    generated_password = serializers.SerializerMethodField()
-
-    class Meta(UserSerializer.Meta):
-        fields = [*UserSerializer.Meta.fields, "generated_password"]
-        read_only_fields = fields
-
-    def get_generated_password(self, obj: User) -> str | None:
-        return self.context.get("generated_password")
 
 
 class TeacherCourseSerializer(serializers.Serializer):
@@ -185,23 +172,154 @@ class StudentDirectorySummarySerializer(serializers.Serializer):
     passed_exams = serializers.IntegerField()
 
 
-class UserCreateSerializer(serializers.Serializer):
+# --------------------------------------------------------------------------
+# Admin accounts (TZ #10-19)
+# --------------------------------------------------------------------------
+class AdminAccountSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "full_name",
+            "username",
+            "email",
+            "role",
+            "status",
+            "phone_number",
+            "location",
+            "avatar_url",
+            "must_change_password",
+            "created_at",
+            "updated_at",
+            "version",
+        ]
+        read_only_fields = fields
+
+    def get_avatar_url(self, obj: User) -> str:
+        return UserSerializer(obj, context=self.context).data["avatar_url"]
+
+
+class AdminAccountDetailSerializer(AdminAccountSerializer):
+    courses = serializers.SerializerMethodField()
+    groups = serializers.SerializerMethodField()
+    exam_stats = serializers.SerializerMethodField()
+    last_active = serializers.DateTimeField(source="last_login", read_only=True, allow_null=True)
+
+    class Meta(AdminAccountSerializer.Meta):
+        fields = [
+            *AdminAccountSerializer.Meta.fields,
+            "courses",
+            "groups",
+            "exam_stats",
+            "last_active",
+        ]
+        read_only_fields = fields
+
+    def get_courses(self, obj: User) -> list[dict]:
+        from apps.academics.models import CourseTeacher, Enrollment
+
+        if obj.role in EDUCATOR_ROLES:
+            return [
+                {
+                    "id": item.course_id,
+                    "name": item.course.name,
+                    "status": item.course.status,
+                    "teacher_type": item.type,
+                    "groups_count": item.course.groups.count(),
+                    "students_count": item.course.enrollments.filter(status="ACTIVE").count(),
+                }
+                for item in CourseTeacher.objects.filter(teacher=obj)
+                .select_related("course")
+                .order_by("course__name")
+            ]
+        if obj.role == UserRole.STUDENT:
+            return [
+                {
+                    "id": item.course_id,
+                    "name": item.course.name,
+                    "status": item.status,
+                    "enrolled_at": item.enrolled_at,
+                    "groups_count": item.course.groups.count(),
+                    "students_count": item.course.enrollments.filter(status="ACTIVE").count(),
+                }
+                for item in Enrollment.objects.filter(student=obj)
+                .select_related("course")
+                .order_by("course__name")
+            ]
+        return []
+
+    def get_groups(self, obj: User) -> list[dict]:
+        from django.db.models import Q
+
+        from apps.academics.models import GroupStudent, StudyGroup
+
+        if obj.role in EDUCATOR_ROLES:
+            groups = StudyGroup.objects.filter(
+                Q(main_teacher=obj) | Q(support_teacher=obj)
+            ).select_related("course")
+            return [
+                {
+                    "id": group.pk,
+                    "name": group.name,
+                    "course_id": group.course_id,
+                    "course_name": group.course.name,
+                    "status": group.status,
+                }
+                for group in groups.order_by("course__name", "name")
+            ]
+        if obj.role == UserRole.STUDENT:
+            return [
+                {
+                    "id": item.group_id,
+                    "name": item.group.name,
+                    "course_id": item.group.course_id,
+                    "course_name": item.group.course.name,
+                    "status": item.group.status,
+                }
+                for item in GroupStudent.objects.filter(student=obj)
+                .select_related("group__course")
+                .order_by("group__course__name", "group__name")
+            ]
+        return []
+
+    def get_exam_stats(self, obj: User) -> dict[str, int]:
+        from apps.assignments.models import ExamAssignment
+        from apps.attempts.choices import AttemptStatus
+        from apps.attempts.models import ExamAttempt
+        from apps.exams.models import Exam
+
+        if obj.role in EDUCATOR_ROLES:
+            return {
+                "created_exams": Exam.objects.filter(created_by=obj).count(),
+                "published_assignments": ExamAssignment.objects.filter(published_by=obj).count(),
+                "graded_attempts": ExamAttempt.objects.filter(
+                    answers__graded_by=obj, status=AttemptStatus.GRADED
+                )
+                .distinct()
+                .count(),
+            }
+        if obj.role == UserRole.STUDENT:
+            attempts = ExamAttempt.objects.filter(student=obj)
+            return {
+                "attempts": attempts.count(),
+                "graded_attempts": attempts.filter(status=AttemptStatus.GRADED).count(),
+                "passed_attempts": attempts.filter(
+                    status=AttemptStatus.GRADED, passed=True
+                ).count(),
+            }
+        return {"created_exams": 0, "published_assignments": 0, "graded_attempts": 0}
+
+
+class AdminAccountCreateSerializer(serializers.Serializer):
     full_name = serializers.CharField(max_length=255)
     email = serializers.EmailField(max_length=254)
-    password = serializers.CharField(
-        write_only=True, trim_whitespace=False, max_length=128, required=False
-    )
-    generate_random_password = serializers.BooleanField(write_only=True, required=False)
-    # SUPER_ADMIN API orqali yaratilmaydi (faqat `createsuperuser`).
     role = serializers.ChoiceField(choices=CreatableUserRole.choices)
-    avatar_url = serializers.URLField(
-        max_length=500,
-        required=False,
-        default="",
-        allow_blank=True,
-        allow_null=True,
-        help_text="Ixtiyoriy. Yuborilmasa bo‘sh qiymat saqlanadi.",
+    phone_number = serializers.RegexField(
+        regex=r"^\+998\d{9}$", required=False, allow_blank=True, default=""
     )
+    location = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
 
     def validate_email(self, value: str) -> str:
         value = value.strip().lower()
@@ -210,37 +328,92 @@ class UserCreateSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs):
-        password_given = "password" in attrs
-        generate_given = "generate_random_password" in attrs
-        generate_random = attrs.get("generate_random_password", False)
-        if generate_random and password_given:
+        forbidden = {
+            "password",
+            "generate_random_password",
+            "course_ids",
+            "group_ids",
+        }.intersection(self.initial_data)
+        if forbidden:
             raise serializers.ValidationError(
-                {"password": ["Random parol so‘ralganda `password` yuborilmasligi kerak."]}
+                {name: ["Bu maydon account yaratishda qabul qilinmaydi."] for name in forbidden}
             )
-        if generate_given and not generate_random and not password_given:
-            raise serializers.ValidationError(
-                {"password": ["Password kiriting yoki random yaratishni tanlang."]}
-            )
-        if password_given:
-            probe = User(full_name=attrs["full_name"], email=attrs["email"])
-            validate_password_strength(attrs["password"], user=probe)
-        attrs["avatar_url"] = attrs.get("avatar_url") or ""
         return attrs
 
 
-class UserUpdateSerializer(serializers.Serializer):
-    full_name = serializers.CharField(max_length=255, required=False)
-    email = serializers.EmailField(max_length=254, required=False)
-    avatar_url = serializers.URLField(max_length=500, required=False, allow_blank=True)
+class IssuedCredentialsSerializer(serializers.Serializer):
+    account_id = serializers.UUIDField()
+    full_name = serializers.CharField()
+    username = serializers.CharField()
+    email = serializers.EmailField()
+    role = serializers.CharField()
+    temporary_password = serializers.CharField()
+    issued_at = serializers.DateTimeField()
+    expires_at = serializers.DateTimeField()
 
-    def validate_email(self, value: str) -> str:
-        value = value.strip().lower()
-        qs = User.objects.filter(email__iexact=value)
-        if self.instance is not None:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError("Bu email allaqachon ro‘yxatdan o‘tgan.")
-        return value
+
+class AdminAccountCreateResponseSerializer(serializers.Serializer):
+    account = AdminAccountDetailSerializer()
+    issued_credentials = IssuedCredentialsSerializer()
+
+
+class AdminAccountUpdateSerializer(serializers.Serializer):
+    full_name = serializers.CharField(max_length=255, required=False)
+    phone_number = serializers.RegexField(regex=r"^\+998\d{9}$", required=False, allow_blank=True)
+    location = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    version = serializers.IntegerField(min_value=1)
+
+    def validate(self, attrs):
+        forbidden = {"email", "role", "status"}.intersection(self.initial_data)
+        if forbidden:
+            raise serializers.ValidationError(
+                {name: ["Bu maydon ushbu endpoint orqali o‘zgartirilmaydi."] for name in forbidden}
+            )
+        if len(attrs) == 1:
+            raise serializers.ValidationError("Versiondan tashqari kamida bitta maydon yuboring.")
+        return attrs
+
+
+class AdminAccountStatusSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=[UserStatus.ACTIVE, UserStatus.INACTIVE])
+    version = serializers.IntegerField(min_value=1)
+
+
+class AccountVersionSerializer(serializers.Serializer):
+    version = serializers.IntegerField(min_value=1)
+
+
+class TeachingCoursesUpdateSerializer(serializers.Serializer):
+    course_ids = serializers.ListField(child=serializers.UUIDField(), allow_empty=True)
+    main_course_ids = serializers.ListField(
+        child=serializers.UUIDField(), allow_empty=True, required=False, default=list
+    )
+    version = serializers.IntegerField(min_value=1)
+
+    def validate(self, attrs):
+        if len(set(attrs["course_ids"])) != len(attrs["course_ids"]):
+            raise serializers.ValidationError({"course_ids": ["Takroriy ID yuborilmang."]})
+        if len(set(attrs["main_course_ids"])) != len(attrs["main_course_ids"]):
+            raise serializers.ValidationError({"main_course_ids": ["Takroriy ID yuborilmang."]})
+        return attrs
+
+
+class AccountActivitySerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    actor_id = serializers.UUIDField(allow_null=True)
+    action = serializers.CharField()
+    metadata = serializers.JSONField()
+    created_at = serializers.DateTimeField()
+
+
+class AccountCourseSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+    status = serializers.CharField()
+    teacher_type = serializers.CharField(required=False)
+    enrolled_at = serializers.DateTimeField(required=False)
+    groups_count = serializers.IntegerField()
+    students_count = serializers.IntegerField()
 
 
 class ProfileUpdateSerializer(serializers.Serializer):
@@ -271,23 +444,18 @@ class ProfileUpdateSerializer(serializers.Serializer):
 CurrentUserUpdateSerializer = ProfileUpdateSerializer
 
 
-class PreferencesUpdateSerializer(serializers.Serializer):
-    language = serializers.ChoiceField(choices=UserLanguage.choices, required=False)
-    theme = serializers.ChoiceField(choices=UserTheme.choices, required=False)
-
-    def validate(self, attrs):
-        if not attrs:
-            raise serializers.ValidationError("Kamida bitta preference yuboring.")
-        return attrs
-
-
-class PreferencesSerializer(serializers.Serializer):
-    language = serializers.ChoiceField(choices=UserLanguage.choices)
-    theme = serializers.ChoiceField(choices=UserTheme.choices)
-
-
 class AvatarUploadSerializer(serializers.Serializer):
-    image = serializers.ImageField(write_only=True)
+    image = serializers.ImageField(
+        write_only=True,
+        help_text="Multipart rasm fayli. Eski klientlar uchun `avatar` kaliti ham qabul qilinadi.",
+    )
+
+    def to_internal_value(self, data):
+        """Model nomidagi `avatar` kalitini schema'ni ko'paytirmasdan qabul qiladi."""
+        normalized = data.copy()
+        if not normalized.get("image") and data.get("avatar"):
+            normalized["image"] = data.get("avatar")
+        return super().to_internal_value(normalized)
 
     def validate_image(self, value):
         if value.size > 5 * 1024 * 1024:
@@ -328,36 +496,37 @@ class ChangeOwnPasswordSerializer(serializers.Serializer):
         return attrs
 
 
-class SetPasswordSerializer(serializers.Serializer):
-    password = serializers.CharField(write_only=True, trim_whitespace=False, max_length=128)
-
-    def validate_password(self, value: str) -> str:
-        return validate_password_strength(value, user=self.context.get("target_user"))
-
-
 # --------------------------------------------------------------------------
 # Auth
 # --------------------------------------------------------------------------
 class LoginSerializer(serializers.Serializer):
-    emailOrUsername = serializers.CharField(required=False, trim_whitespace=True, write_only=True)
-    email_or_username = serializers.CharField(required=False, trim_whitespace=True)
-    email = serializers.EmailField(required=False, write_only=True)
-    password = serializers.CharField(write_only=True, trim_whitespace=False, required=False)
+    emailOrUsername = serializers.CharField(
+        trim_whitespace=True,
+        write_only=True,
+        help_text=(
+            "Email yoki username. `email` va `email_or_username` legacy aliaslari ham "
+            "qabul qilinadi."
+        ),
+    )
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
 
     default_error_messages = {
         "no_active_account": "Email yoki parol noto‘g‘ri, yoki akkaunt faol emas.",
     }
 
+    def to_internal_value(self, data):
+        """Legacy login kalitlarini OpenAPI'da ko'rsatmasdan canonical nomga o'tkazadi."""
+        normalized = data.copy()
+        legacy_identifier = data.get("email_or_username") or data.get("email")
+        if not normalized.get("emailOrUsername") and legacy_identifier:
+            normalized["emailOrUsername"] = legacy_identifier
+        return super().to_internal_value(normalized)
+
     def validate(self, attrs):
-        identifier = (
-            attrs.get("emailOrUsername")
-            or attrs.get("email_or_username")
-            or attrs.get("email")
-            or ""
-        ).strip()
+        identifier = (attrs.get("emailOrUsername") or "").strip()
         errors = {}
         if not identifier:
-            errors["email_or_username"] = ["Email yoki username kiriting."]
+            errors["emailOrUsername"] = ["Email yoki username kiriting."]
         if not attrs.get("password"):
             errors["password"] = ["Password kiriting."]
         if errors:

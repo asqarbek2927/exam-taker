@@ -348,6 +348,8 @@ def test_group_archive_restore_and_read_only_rule(auth_client, admin):
     assert restored.json()["status"] == "ACTIVE"
 
 
-def test_group_directory_is_admin_only(auth_client, teacher):
-    assert auth_client(teacher).get("/api/v1/groups").status_code == 403
+def test_group_directory_is_scoped_for_teacher(auth_client, teacher):
+    response = auth_client(teacher).get("/api/v1/groups")
+    assert response.status_code == 200
+    assert response.json()["data"] == []
     assert auth_client(teacher).get("/api/v1/groups/summary").status_code == 403

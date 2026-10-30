@@ -19,6 +19,7 @@ COPY . .
 RUN SECRET_KEY=build-only DATABASE_URL=sqlite:////tmp/build.sqlite3 \
     python manage.py collectstatic --noinput \
     && mkdir -p /app/data /app/media \
+    && chmod +x /app/docker/entrypoint.sh \
     && chown -R app:app /app
 
 USER app

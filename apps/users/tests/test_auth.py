@@ -1,8 +1,10 @@
 import pytest
+from django.contrib.auth import password_validation
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 
 from apps.users.choices import UserStatus
+from apps.users.serializers import LoginSerializer
 from apps.users.tests.factories import DEFAULT_PASSWORD, TeacherFactory
 
 pytestmark = pytest.mark.django_db
@@ -11,15 +13,35 @@ LOGIN = "/api/v1/auth/login"
 REFRESH = "/api/v1/auth/refresh"
 LOGOUT = "/api/v1/auth/logout"
 ME = "/api/v1/auth/me"
-CHANGE_PASSWORD = "/api/v1/auth/change-password"
+CHANGE_PASSWORD = "/api/v1/profile/change-password"
 PROFILE = "/api/v1/profile"
-PROFILE_PREFERENCES = "/api/v1/profile/preferences"
 
 
 def login(client, user, password=DEFAULT_PASSWORD):
     return client.post(
         LOGIN, {"email_or_username": user.email, "password": password}, format="json"
     )
+
+
+def test_login_request_contract_has_one_identifier_field():
+    assert set(LoginSerializer().fields) == {"emailOrUsername", "password"}
+
+
+def test_common_password_validator_is_disabled():
+    validators = password_validation.get_default_password_validators()
+    assert not any(type(item).__name__ == "CommonPasswordValidator" for item in validators)
+
+
+@pytest.mark.parametrize(
+    "path,method",
+    [
+        ("/api/v1/users", "get"),
+        ("/api/v1/auth/change-password", "post"),
+        ("/api/v1/profile/preferences", "patch"),
+    ],
+)
+def test_removed_legacy_endpoints_return_404(api_client, path, method):
+    assert getattr(api_client, method)(path, {}, format="json").status_code == 404
 
 
 def bearer(client, access):
@@ -66,7 +88,7 @@ def test_login_missing_fields_returns_422(api_client):
     assert response.status_code == 422
     body = response.json()
     assert body["message"] == "Validation failed"
-    assert set(body["errors"]) == {"email_or_username", "password"}
+    assert set(body["errors"]) == {"emailOrUsername", "password"}
 
 
 def test_login_is_throttled_per_ip_and_email(api_client, teacher, monkeypatch):
@@ -114,20 +136,6 @@ def test_me_returns_current_user(api_client, teacher):
     assert response.status_code == 200
     assert response.json()["email"] == teacher.email
     assert "password" not in response.json()
-
-
-def test_me_updates_language_preference(api_client, teacher):
-    bearer(api_client, login(api_client, teacher).json()["access_token"])
-
-    response = api_client.patch(PROFILE_PREFERENCES, {"language": "uz"}, format="json")
-    assert response.status_code == 200
-    assert response.json()["language"] == "uz"
-    teacher.refresh_from_db()
-    assert teacher.language == "uz"
-
-    invalid = api_client.patch(PROFILE_PREFERENCES, {"language": "de"}, format="json")
-    assert invalid.status_code == 422
-    assert "language" in invalid.json()["errors"]
 
 
 def test_profile_updates_phone_and_rejects_managed_fields(api_client, teacher):

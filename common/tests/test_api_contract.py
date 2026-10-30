@@ -11,7 +11,7 @@ def test_openapi_schema_is_served_and_valid(api_client):
 def test_malformed_json_returns_400_in_error_format(auth_client, admin):
     client = auth_client(admin)
     response = client.generic(
-        "POST", "/api/v1/users", data="{not json", content_type="application/json"
+        "POST", "/api/v1/admin/accounts", data="{not json", content_type="application/json"
     )
     assert response.status_code == 400
     assert response.json()["error"] == "Bad Request"
@@ -19,7 +19,9 @@ def test_malformed_json_returns_400_in_error_format(auth_client, admin):
 
 def test_unsupported_media_type(auth_client, admin):
     client = auth_client(admin)
-    response = client.generic("POST", "/api/v1/users", data="a=b", content_type="text/plain")
+    response = client.generic(
+        "POST", "/api/v1/admin/accounts", data="a=b", content_type="text/plain"
+    )
     assert response.status_code == 415
     assert response.json()["status_code"] == 415
 

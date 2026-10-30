@@ -1,3 +1,4 @@
+from django.db.models import Q
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
     OpenApiParameter,
@@ -7,16 +8,20 @@ from drf_spectacular.utils import (
 )
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import MethodNotAllowed, ValidationError
 from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from apps.users.serializers import UserBriefSerializer
 from common.constants import UUID_REGEX
+from common.exceptions import BusinessRuleError
 from common.permissions import IsStudent, IsSuperAdmin, IsTeacher
 from common.serializers import ArchivedResponseSerializer
 
 from . import selectors, services
-from .choices import EnrollmentStatus, ModuleStatus
+from .choices import CourseStatus, EnrollmentStatus, ModuleStatus
 from .filters import (
     CourseFilter,
     CourseTeacherFilter,
@@ -26,23 +31,30 @@ from .filters import (
 )
 from .models import CourseTeacher, Enrollment, GroupStudent, Module, StudyGroup
 from .serializers import (
+    AcademicStudentCourseCardSerializer,
     CourseCatalogSummarySerializer,
     CourseDetailSerializer,
     CourseListSerializer,
+    CourseMutationSerializer,
+    CourseStatusSerializer,
     CourseTeacherCreateSerializer,
     CourseTeacherSerializer,
     CourseTeacherUpdateSerializer,
-    CourseWriteSerializer,
     EnrollmentCreateSerializer,
     EnrollmentSerializer,
     EnrollmentUpdateSerializer,
+    GroupDetailSerializer,
     GroupDirectorySummarySerializer,
     GroupDirectoryWriteSerializer,
     GroupSerializer,
+    GroupStatusSerializer,
     GroupStudentCreateSerializer,
     GroupStudentSerializer,
+    GroupUpdateSerializer,
     GroupWriteSerializer,
+    ModuleOrderSerializer,
     ModuleSerializer,
+    ModuleStatusSerializer,
     ModuleWithQuestionsSerializer,
     ModuleWriteSerializer,
 )
@@ -59,10 +71,10 @@ COURSE_PK = OpenApiParameter(
     list=extend_schema(tags=["courses"], responses={200: CourseListSerializer(many=True)}),
     retrieve=extend_schema(tags=["courses"], responses={200: CourseDetailSerializer}),
     create=extend_schema(
-        tags=["courses"], request=CourseWriteSerializer, responses={201: CourseDetailSerializer}
+        tags=["courses"], request=CourseMutationSerializer, responses={201: CourseDetailSerializer}
     ),
     partial_update=extend_schema(
-        tags=["courses"], request=CourseWriteSerializer, responses={200: CourseDetailSerializer}
+        tags=["courses"], request=CourseMutationSerializer, responses={200: CourseDetailSerializer}
     ),
 )
 class CourseViewSet(
@@ -79,7 +91,7 @@ class CourseViewSet(
     ordering_fields = ["name", "created_at"]
     ordering = ["name", "created_at"]
     lookup_value_regex = UUID_REGEX
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "put", "patch", "head", "options"]
 
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
@@ -99,20 +111,29 @@ class CourseViewSet(
     def _detail_response(self, course_id, status_code=status.HTTP_200_OK) -> Response:
         # Qayta o‘qiladi: response `teachers_count`/`students_count` annotatsiyasini talab qiladi.
         course = selectors.course_detail_queryset().get(pk=course_id)
-        return Response(CourseDetailSerializer(course).data, status=status_code)
+        return Response(
+            CourseDetailSerializer(course, context={"request": self.request}).data,
+            status=status_code,
+        )
 
     def create(self, request, *args, **kwargs):
-        serializer = CourseWriteSerializer(data=request.data)
+        serializer = CourseMutationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        if "name" not in serializer.validated_data:
+            raise ValidationError({"name": ["This field is required."]})
         course = services.create_course(**serializer.validated_data)
         return self._detail_response(course.pk, status.HTTP_201_CREATED)
 
     def partial_update(self, request, *args, **kwargs):
         course = self.get_object()
-        serializer = CourseWriteSerializer(data=request.data, partial=True)
+        serializer = CourseMutationSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         services.update_course(course, **serializer.validated_data)
         return self._detail_response(course.pk)
+
+    @extend_schema(exclude=True)
+    def update(self, request, *args, **kwargs):
+        raise MethodNotAllowed("PUT")
 
     @extend_schema(tags=["courses"], request=None, responses={200: CourseDetailSerializer})
     @action(detail=True, methods=["post"])
@@ -124,6 +145,16 @@ class CourseViewSet(
     @action(detail=True, methods=["post"])
     def restore(self, request, pk=None):
         course = services.restore_course(self.get_object())
+        return self._detail_response(course.pk)
+
+    @extend_schema(
+        tags=["courses"], request=CourseStatusSerializer, responses={200: CourseDetailSerializer}
+    )
+    @action(detail=True, methods=["put"], url_path="status")
+    def set_status(self, request, pk=None):
+        serializer = CourseStatusSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        course = services.set_course_status(self.get_object(), **serializer.validated_data)
         return self._detail_response(course.pk)
 
     @extend_schema(tags=["courses"], responses={200: CourseCatalogSummarySerializer})
@@ -297,6 +328,51 @@ class EnrollmentViewSet(
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class EnrollmentAliasViewSet(
+    CourseNestedMixin,
+    mixins.CreateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """TZ alias: enrollment student ID bilan oâ€˜chiriladi; eski `/students` saqlanadi."""
+
+    serializer_class = EnrollmentSerializer
+    lookup_field = "student_id"
+    lookup_url_kwarg = "student_id"
+    lookup_value_regex = UUID_REGEX
+    http_method_names = ["post", "delete", "head", "options"]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Enrollment.objects.none()
+        return selectors.course_enrollments(self.get_course())
+
+    @extend_schema(
+        tags=["course-enrollments"],
+        request=EnrollmentCreateSerializer,
+        responses={200: EnrollmentSerializer, 201: EnrollmentSerializer},
+    )
+    def create(self, request, *args, **kwargs):
+        course = self.get_course()
+        if course.status != CourseStatus.ACTIVE:
+            raise BusinessRuleError("Student faqat ACTIVE kursga yoziladi.")
+        serializer = EnrollmentCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        student = serializer.validated_data["student"]
+        existing = Enrollment.objects.filter(
+            course=course, student=student, status=EnrollmentStatus.ACTIVE
+        ).first()
+        if existing is not None:
+            return Response(EnrollmentSerializer(existing).data)
+        enrollment = services.enroll_student(course=course, student=student)
+        return Response(EnrollmentSerializer(enrollment).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(tags=["course-enrollments"], responses={204: None})
+    def destroy(self, request, *args, **kwargs):
+        services.remove_enrollment(enrollment=self.get_object())
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 # --------------------------------------------------------------------------
 # Module: /courses/{course_pk}/modules
 # --------------------------------------------------------------------------
@@ -357,7 +433,7 @@ class ModuleViewSet(
     ordering_fields = ["position", "title", "created_at"]
     ordering = ["position", "created_at"]
     lookup_value_regex = UUID_REGEX
-    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+    http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
 
     def _wants_preview(self) -> bool:
         flag = self.request.query_params.get("with_questions", "").lower() in ("1", "true")
@@ -396,11 +472,54 @@ class ModuleViewSet(
         services.update_module(module, **serializer.validated_data)
         return self._module_response(module.pk)
 
+    @extend_schema(exclude=True)
+    def update(self, request, *args, **kwargs):
+        raise MethodNotAllowed("PUT")
+
     def destroy(self, request, *args, **kwargs):
         archived = services.delete_or_archive_module(self.get_object())
         if archived:
             return Response({"archived": True}, status=status.HTTP_200_OK)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        tags=["modules"], request=ModuleStatusSerializer, responses={200: ModuleSerializer}
+    )
+    @action(detail=True, methods=["put"], url_path="status")
+    def set_status(self, request, *args, **kwargs):
+        serializer = ModuleStatusSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        module = services.set_module_status(self.get_object(), **serializer.validated_data)
+        return self._module_response(module.pk)
+
+    @extend_schema(
+        tags=["modules"],
+        request=ModuleOrderSerializer,
+        responses={200: ModuleSerializer(many=True)},
+    )
+    @action(detail=False, methods=["put"], url_path="order")
+    def order(self, request, *args, **kwargs):
+        serializer = ModuleOrderSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        services.reorder_modules(course=self.get_course(), **serializer.validated_data)
+        modules = selectors.course_modules(self.get_course())
+        return Response(ModuleSerializer(modules, many=True).data)
+
+
+class StudentMyCoursesView(APIView):
+    permission_classes = [IsStudent]
+
+    @extend_schema(
+        tags=["student-courses"], responses={200: AcademicStudentCourseCardSerializer(many=True)}
+    )
+    def get(self, request):
+        queryset = selectors.with_course_stats(
+            selectors.courses_visible_to(request.user).filter(
+                enrollments__student=request.user,
+                enrollments__status__in=[EnrollmentStatus.ACTIVE, EnrollmentStatus.COMPLETED],
+            )
+        ).distinct()
+        return Response(AcademicStudentCourseCardSerializer(queryset, many=True).data)
 
 
 # --------------------------------------------------------------------------
@@ -494,8 +613,8 @@ class GroupViewSet(
     ),
     partial_update=extend_schema(
         tags=["group-directory"],
-        request=GroupWriteSerializer,
-        responses={200: GroupSerializer},
+        request=GroupUpdateSerializer,
+        responses={200: GroupDetailSerializer},
     ),
 )
 class GroupDirectoryViewSet(
@@ -505,29 +624,38 @@ class GroupDirectoryViewSet(
     mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
-    permission_classes = [IsSuperAdmin]
     filterset_class = GroupDirectoryFilter
     search_fields = ["name", "course__name"]
     ordering_fields = ["name", "created_at", "students_count", "course__name"]
     ordering = ["name", "created_at"]
     lookup_value_regex = UUID_REGEX
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [IsAuthenticated()]
+        return [IsSuperAdmin()]
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return StudyGroup.objects.none()
-        return selectors.group_directory()
+        return selectors.visible_group_directory(self.request.user)
 
     def get_serializer_class(self):
         if self.action == "create":
             return GroupDirectoryWriteSerializer
         if self.action == "partial_update":
-            return GroupWriteSerializer
+            return GroupUpdateSerializer
+        if self.action == "retrieve":
+            return GroupDetailSerializer
         return GroupSerializer
 
     def _group_response(self, group_id, status_code=status.HTTP_200_OK) -> Response:
         group = selectors.group_directory().get(pk=group_id)
-        return Response(GroupSerializer(group).data, status=status_code)
+        return Response(
+            GroupDetailSerializer(group, context={"request": self.request}).data,
+            status=status_code,
+        )
 
     def create(self, request, *args, **kwargs):
         serializer = GroupDirectoryWriteSerializer(data=request.data)
@@ -537,10 +665,73 @@ class GroupDirectoryViewSet(
 
     def partial_update(self, request, *args, **kwargs):
         group = self.get_object()
-        serializer = GroupWriteSerializer(data=request.data, partial=True)
+        serializer = GroupUpdateSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         services.update_group(group, **serializer.validated_data)
         return self._group_response(group.pk)
+
+    @extend_schema(exclude=True)
+    def update(self, request, *args, **kwargs):
+        raise MethodNotAllowed("PUT")
+
+    @extend_schema(
+        tags=["group-directory"],
+        request=GroupStatusSerializer,
+        responses={200: GroupDetailSerializer},
+    )
+    @action(detail=True, methods=["put"], url_path="status")
+    def set_status(self, request, pk=None):
+        serializer = GroupStatusSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        group = services.set_group_status(self.get_object(), **serializer.validated_data)
+        return self._group_response(group.pk)
+
+    @extend_schema(
+        tags=["group-directory"],
+        parameters=[OpenApiParameter("q", OpenApiTypes.STR)],
+        responses={200: UserBriefSerializer(many=True)},
+    )
+    @action(detail=True, methods=["get"], url_path="eligible-students")
+    def eligible_students(self, request, pk=None):
+        # `q` student qidiruvi; group queryset filteriga tushib 404 qilmasligi kerak.
+        group = get_object_or_404(self.get_queryset(), pk=pk)
+        queryset = selectors.eligible_group_students(group)
+        query = request.query_params.get("q") or request.query_params.get("search")
+        if query:
+            queryset = queryset.filter(Q(full_name__icontains=query) | Q(email__icontains=query))
+        page = self.paginate_queryset(queryset)
+        serializer = UserBriefSerializer(page, many=True)
+        return self.get_paginated_response(serializer.data)
+
+    @extend_schema(
+        tags=["group-directory"],
+        request=GroupStudentCreateSerializer,
+        responses={201: GroupStudentSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="students")
+    def add_student(self, request, pk=None):
+        serializer = GroupStudentCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        membership = services.add_student_to_group(
+            group=self.get_object(), student=serializer.validated_data["student"]
+        )
+        return Response(GroupStudentSerializer(membership).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        tags=["group-directory"],
+        responses={204: OpenApiResponse(description="Student guruhdan chiqarildi.")},
+    )
+    @action(
+        detail=True,
+        methods=["delete"],
+        url_path=rf"students/(?P<student_id>{UUID_REGEX})",
+    )
+    def remove_student(self, request, pk=None, student_id=None):
+        membership = get_object_or_404(
+            selectors.group_students(self.get_object()), student_id=student_id
+        )
+        services.remove_student_from_group(group_student=membership)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(tags=["group-directory"], request=None, responses={200: GroupSerializer})
     @action(detail=True, methods=["post"])

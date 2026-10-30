@@ -12,6 +12,7 @@ from apps.users.tests.factories import (
     DEFAULT_PASSWORD,
     AdminFactory,
     StudentFactory,
+    SupportTeacherFactory,
     TeacherFactory,
 )
 
@@ -22,7 +23,6 @@ ME = "/api/v1/auth/me"
 PROFILE = "/api/v1/profile"
 PHOTO = "/api/v1/profile/photo"
 PASSWORD = "/api/v1/profile/change-password"
-PREFERENCES = "/api/v1/profile/preferences"
 
 
 def login(client, identifier, password=DEFAULT_PASSWORD):
@@ -78,7 +78,7 @@ def test_refresh_rejects_expired_temporary_password(api_client):
     assert "muddati tugagan" in response.json()["message"]
 
 
-def test_me_returns_permissions_and_nested_preferences(api_client):
+def test_me_returns_permissions_without_preferences(api_client):
     assignment = CourseTeacherFactory(type=CourseTeacherType.SUPPORT)
     authenticate(api_client, assignment.teacher)
 
@@ -90,7 +90,7 @@ def test_me_returns_permissions_and_nested_preferences(api_client):
         "can_grade": True,
         "is_support_teacher": True,
     }
-    assert body["preferences"] == {"language": "en", "theme": "system"}
+    assert "preferences" not in body
     assert "password" not in body
 
 
@@ -110,32 +110,44 @@ def test_profile_role_rules(api_client):
     assert accepted.json()["full_name"] == "New Admin"
 
 
-def test_preferences_updates_language_and_theme(api_client):
-    user = TeacherFactory()
-    authenticate(api_client, user)
-    response = api_client.patch(PREFERENCES, {"language": "ru", "theme": "dark"}, format="json")
-    assert response.status_code == 200
-    assert response.json() == {"language": "ru", "theme": "dark"}
-
-
-def test_photo_upload_and_delete(
-    api_client, teacher, tmp_path, settings, django_capture_on_commit_callbacks
+@pytest.mark.parametrize(
+    "user_factory",
+    [AdminFactory, TeacherFactory, SupportTeacherFactory, StudentFactory],
+)
+def test_photo_upload_and_delete_for_every_role(
+    api_client, user_factory, tmp_path, settings, django_capture_on_commit_callbacks
 ):
     settings.MEDIA_ROOT = tmp_path
-    authenticate(api_client, teacher)
+    user = user_factory()
+    authenticate(api_client, user)
     uploaded = api_client.post(PHOTO, {"image": image_file()}, format="multipart")
     assert uploaded.status_code == 200
     assert uploaded.json()["avatar_url"].endswith(".png")
-    teacher.refresh_from_db()
-    stored_path = tmp_path / teacher.avatar.name
+    user.refresh_from_db()
+    stored_path = tmp_path / user.avatar.name
+    assert user.avatar.name.startswith("avatars/")
     assert stored_path.exists()
+
+    profile = api_client.get(PROFILE)
+    assert profile.status_code == 200
+    assert profile.json()["avatar_url"] == uploaded.json()["avatar_url"]
 
     with django_capture_on_commit_callbacks(execute=True):
         deleted = api_client.delete(PHOTO)
     assert deleted.status_code == 204
-    teacher.refresh_from_db()
-    assert not teacher.avatar
+    user.refresh_from_db()
+    assert not user.avatar
     assert not stored_path.exists()
+
+
+def test_photo_upload_accepts_avatar_field_alias(api_client, student, tmp_path, settings):
+    settings.MEDIA_ROOT = tmp_path
+    authenticate(api_client, student)
+    response = api_client.post(PHOTO, {"avatar": image_file()}, format="multipart")
+    assert response.status_code == 200
+    student.refresh_from_db()
+    assert student.avatar.name.startswith("avatars/")
+    assert (tmp_path / student.avatar.name).exists()
 
 
 def test_photo_rejects_non_image(api_client, teacher):

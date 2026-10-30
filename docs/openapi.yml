@@ -4,6 +4,419 @@ info:
   version: 1.0.0
   description: IT Academy uchun onlayn imtihon platformasi — backend API.
 paths:
+  /api/v1/admin/accounts:
+    get:
+      operationId: v1_admin_accounts_list
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: role
+        schema:
+          type: string
+          enum:
+          - STUDENT
+          - SUPER_ADMIN
+          - SUPPORT_TEACHER
+          - TEACHER
+        description: |-
+          * `SUPER_ADMIN` - Super Admin
+          * `TEACHER` - Teacher
+          * `SUPPORT_TEACHER` - Support Teacher
+          * `STUDENT` - Student
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - ACTIVE
+          - DELETED
+          - INACTIVE
+        description: |-
+          * `ACTIVE` - Active
+          * `INACTIVE` - Inactive
+          * `DELETED` - Deleted
+      tags:
+      - admin-accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAdminAccountList'
+          description: ''
+    post:
+      operationId: v1_admin_accounts_create
+      tags:
+      - admin-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminAccountCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountCreateResponse'
+          description: ''
+  /api/v1/admin/accounts/{id}:
+    get:
+      operationId: v1_admin_accounts_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - admin-accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountDetail'
+          description: ''
+    patch:
+      operationId: v1_admin_accounts_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - admin-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminAccountUpdateRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountDetail'
+          description: ''
+    delete:
+      operationId: v1_admin_accounts_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - admin-accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: Account soft-delete qilindi.
+  /api/v1/admin/accounts/{id}/activity:
+    get:
+      operationId: v1_admin_accounts_activity_list
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: role
+        schema:
+          type: string
+          enum:
+          - STUDENT
+          - SUPER_ADMIN
+          - SUPPORT_TEACHER
+          - TEACHER
+        description: |-
+          * `SUPER_ADMIN` - Super Admin
+          * `TEACHER` - Teacher
+          * `SUPPORT_TEACHER` - Support Teacher
+          * `STUDENT` - Student
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - ACTIVE
+          - DELETED
+          - INACTIVE
+        description: |-
+          * `ACTIVE` - Active
+          * `INACTIVE` - Inactive
+          * `DELETED` - Deleted
+      tags:
+      - admin-accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAccountActivityList'
+          description: ''
+  /api/v1/admin/accounts/{id}/courses:
+    get:
+      operationId: v1_admin_accounts_courses_list
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: role
+        schema:
+          type: string
+          enum:
+          - STUDENT
+          - SUPER_ADMIN
+          - SUPPORT_TEACHER
+          - TEACHER
+        description: |-
+          * `SUPER_ADMIN` - Super Admin
+          * `TEACHER` - Teacher
+          * `SUPPORT_TEACHER` - Support Teacher
+          * `STUDENT` - Student
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - ACTIVE
+          - DELETED
+          - INACTIVE
+        description: |-
+          * `ACTIVE` - Active
+          * `INACTIVE` - Inactive
+          * `DELETED` - Deleted
+      tags:
+      - admin-accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAccountCourseList'
+          description: ''
+  /api/v1/admin/accounts/{id}/status:
+    put:
+      operationId: v1_admin_accounts_status_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - admin-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminAccountStatusRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountDetail'
+          description: ''
+  /api/v1/admin/accounts/{id}/teaching-courses:
+    put:
+      operationId: v1_admin_accounts_teaching_courses_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: role
+        schema:
+          type: string
+          enum:
+          - STUDENT
+          - SUPER_ADMIN
+          - SUPPORT_TEACHER
+          - TEACHER
+        description: |-
+          * `SUPER_ADMIN` - Super Admin
+          * `TEACHER` - Teacher
+          * `SUPPORT_TEACHER` - Support Teacher
+          * `STUDENT` - Student
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - ACTIVE
+          - DELETED
+          - INACTIVE
+        description: |-
+          * `ACTIVE` - Active
+          * `INACTIVE` - Inactive
+          * `DELETED` - Deleted
+      tags:
+      - admin-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeachingCoursesUpdateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAccountCourseList'
+          description: ''
+  /api/v1/admin/accounts/{id}/temporary-password:
+    post:
+      operationId: v1_admin_accounts_temporary_password_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - admin-accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountCreateResponse'
+          description: ''
   /api/v1/admin/dashboard:
     get:
       operationId: v1_admin_dashboard_retrieve
@@ -171,6 +584,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AnswerInputRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
@@ -179,6 +593,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Answer'
+          description: ''
+  /api/v1/attempts/{id}/events:
+    post:
+      operationId: v1_attempts_events_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - attempts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttemptEventInputRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttemptEventResponse'
           description: ''
   /api/v1/attempts/{id}/submit:
     post:
@@ -251,7 +692,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/CurrentUser'
           description: ''
   /api/v1/auth/refresh:
     post:
@@ -298,6 +739,10 @@ paths:
         description: A page number within the paginated result set.
         schema:
           type: integer
+      - in: query
+        name: q
+        schema:
+          type: string
       - name: search
         required: false
         in: query
@@ -311,9 +756,21 @@ paths:
           enum:
           - ACTIVE
           - ARCHIVED
+          - DRAFT
         description: |-
+          * `DRAFT` - Draft
           * `ACTIVE` - Active
           * `ARCHIVED` - Archived
+      - in: query
+        name: teacherId
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: teacher_id
+        schema:
+          type: string
+          format: uuid
       tags:
       - courses
       security:
@@ -334,8 +791,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CourseWriteRequest'
-        required: true
+              $ref: '#/components/schemas/CourseMutationRequest'
       security:
       - jwtAuth: []
       responses:
@@ -345,6 +801,66 @@ paths:
               schema:
                 $ref: '#/components/schemas/CourseDetail'
           description: ''
+  /api/v1/courses/{course_pk}/enrollments:
+    post:
+      operationId: v1_courses_enrollments_create
+      description: 'TZ alias: enrollment student ID bilan oâ€˜chiriladi; eski `/students`
+        saqlanadi.'
+      parameters:
+      - in: path
+        name: course_pk
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - course-enrollments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnrollmentCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Enrollment'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Enrollment'
+          description: ''
+  /api/v1/courses/{course_pk}/enrollments/{student_id}:
+    delete:
+      operationId: v1_courses_enrollments_destroy
+      description: 'TZ alias: enrollment student ID bilan oâ€˜chiriladi; eski `/students`
+        saqlanadi.'
+      parameters:
+      - in: path
+        name: course_pk
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      - in: path
+        name: student_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - course-enrollments
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/courses/{course_pk}/groups:
     get:
       operationId: v1_courses_groups_list
@@ -645,6 +1161,64 @@ paths:
       responses:
         '204':
           description: Guruh o‘chirildi.
+  /api/v1/courses/{course_pk}/groups/{id}/archive:
+    post:
+      operationId: v1_courses_groups_archive_create
+      description: Guruhlar. O‘qish — Super Admin va kursga biriktirilgan teacher;
+        yozish — Super Admin.
+      parameters:
+      - in: path
+        name: course_pk
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - groups
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+          description: ''
+  /api/v1/courses/{course_pk}/groups/{id}/restore:
+    post:
+      operationId: v1_courses_groups_restore_create
+      description: Guruhlar. O‘qish — Super Admin va kursga biriktirilgan teacher;
+        yozish — Super Admin.
+      parameters:
+      - in: path
+        name: course_pk
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - groups
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+          description: ''
   /api/v1/courses/{course_pk}/modules:
     get:
       operationId: v1_courses_modules_list
@@ -831,6 +1405,104 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ArchivedResponse'
+          description: ''
+  /api/v1/courses/{course_pk}/modules/{id}/status:
+    put:
+      operationId: v1_courses_modules_status_update
+      description: 'Modullar course ichida shared: kursga biriktirilgan har qanday
+        teacher tahrirlaydi.'
+      parameters:
+      - in: path
+        name: course_pk
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - modules
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuleStatusRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Module'
+          description: ''
+  /api/v1/courses/{course_pk}/modules/order:
+    put:
+      operationId: v1_courses_modules_order_update
+      description: 'Modullar course ichida shared: kursga biriktirilgan har qanday
+        teacher tahrirlaydi.'
+      parameters:
+      - in: path
+        name: course_pk
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - ACTIVE
+          - ARCHIVED
+        description: |-
+          * `ACTIVE` - Active
+          * `ARCHIVED` - Archived
+      tags:
+      - modules
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuleOrderRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedModuleList'
           description: ''
   /api/v1/courses/{course_pk}/students:
     get:
@@ -1186,7 +1858,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PatchedCourseWriteRequest'
+              $ref: '#/components/schemas/PatchedCourseMutationRequest'
       security:
       - jwtAuth: []
       responses:
@@ -1217,6 +1889,71 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CourseDetail'
+          description: ''
+  /api/v1/courses/{id}/restore:
+    post:
+      operationId: v1_courses_restore_create
+      description: Kurslar. O‘qish — rolga qarab scoped; yozish — faqat Super Admin.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - courses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseDetail'
+          description: ''
+  /api/v1/courses/{id}/status:
+    put:
+      operationId: v1_courses_status_update
+      description: Kurslar. O‘qish — rolga qarab scoped; yozish — faqat Super Admin.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - courses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseStatusRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseDetail'
+          description: ''
+  /api/v1/courses/summary:
+    get:
+      operationId: v1_courses_summary_retrieve
+      description: Kurslar. O‘qish — rolga qarab scoped; yozish — faqat Super Admin.
+      tags:
+      - courses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseCatalogSummary'
           description: ''
   /api/v1/exam-assignments:
     get:
@@ -1265,6 +2002,18 @@ paths:
         description: A page number within the paginated result set.
         schema:
           type: integer
+      - in: query
+        name: scope
+        schema:
+          type: string
+          enum:
+          - all
+          - archived
+          - current
+        description: |-
+          * `current` - Current
+          * `archived` - Archived
+          * `all` - All
       - name: search
         required: false
         in: query
@@ -1289,8 +2038,6 @@ paths:
           description: ''
     post:
       operationId: v1_exam_assignments_create
-      description: Exam e’lonlari. O‘zgartirish/status amallari — e’lon muallifi yoki
-        Super Admin.
       tags:
       - exam-assignments
       requestBody:
@@ -1311,8 +2058,6 @@ paths:
   /api/v1/exam-assignments/{id}:
     get:
       operationId: v1_exam_assignments_retrieve
-      description: Exam e’lonlari. O‘zgartirish/status amallari — e’lon muallifi yoki
-        Super Admin.
       parameters:
       - in: path
         name: id
@@ -1333,8 +2078,6 @@ paths:
           description: ''
     patch:
       operationId: v1_exam_assignments_partial_update
-      description: Exam e’lonlari. O‘zgartirish/status amallari — e’lon muallifi yoki
-        Super Admin.
       parameters:
       - in: path
         name: id
@@ -1358,11 +2101,46 @@ paths:
               schema:
                 $ref: '#/components/schemas/AssignmentDetail'
           description: ''
+    delete:
+      operationId: v1_exam_assignments_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/exam-assignments/{id}/archive:
+    post:
+      operationId: v1_exam_assignments_archive_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - exam-assignments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentDetail'
+          description: ''
   /api/v1/exam-assignments/{id}/cancel:
     post:
       operationId: v1_exam_assignments_cancel_create
-      description: Exam e’lonlari. O‘zgartirish/status amallari — e’lon muallifi yoki
-        Super Admin.
       parameters:
       - in: path
         name: id
@@ -1384,8 +2162,6 @@ paths:
   /api/v1/exam-assignments/{id}/complete:
     post:
       operationId: v1_exam_assignments_complete_create
-      description: Exam e’lonlari. O‘zgartirish/status amallari — e’lon muallifi yoki
-        Super Admin.
       parameters:
       - in: path
         name: id
@@ -1407,8 +2183,6 @@ paths:
   /api/v1/exam-assignments/{id}/pause:
     post:
       operationId: v1_exam_assignments_pause_create
-      description: Exam e’lonlari. O‘zgartirish/status amallari — e’lon muallifi yoki
-        Super Admin.
       parameters:
       - in: path
         name: id
@@ -1430,8 +2204,6 @@ paths:
   /api/v1/exam-assignments/{id}/publish:
     post:
       operationId: v1_exam_assignments_publish_create
-      description: Exam e’lonlari. O‘zgartirish/status amallari — e’lon muallifi yoki
-        Super Admin.
       parameters:
       - in: path
         name: id
@@ -1450,11 +2222,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/AssignmentDetail'
           description: ''
+  /api/v1/exam-assignments/{id}/release-answer-review:
+    post:
+      operationId: v1_exam_assignments_release_answer_review_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - exam-assignments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewReleaseRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentDetail'
+          description: ''
   /api/v1/exam-assignments/{id}/restore:
     post:
       operationId: v1_exam_assignments_restore_create
-      description: Exam e’lonlari. O‘zgartirish/status amallari — e’lon muallifi yoki
-        Super Admin.
       parameters:
       - in: path
         name: id
@@ -1476,8 +2272,6 @@ paths:
   /api/v1/exam-assignments/{id}/resume:
     post:
       operationId: v1_exam_assignments_resume_create
-      description: Exam e’lonlari. O‘zgartirish/status amallari — e’lon muallifi yoki
-        Super Admin.
       parameters:
       - in: path
         name: id
@@ -1495,6 +2289,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AssignmentDetail'
+          description: ''
+  /api/v1/exam-assignments/{id}/review-policy:
+    get:
+      operationId: v1_exam_assignments_review_policy_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - exam-assignments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewPolicy'
           description: ''
   /api/v1/exam-assignments/{id}/start:
     post:
@@ -1518,6 +2333,69 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StudentAttempt'
+          description: ''
+  /api/v1/exam-assignments/{id}/transitions:
+    post:
+      operationId: v1_exam_assignments_transitions_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - exam-assignments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignmentTransitionRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentDetail'
+          description: ''
+  /api/v1/exam-assignments/{id}/unarchive:
+    post:
+      operationId: v1_exam_assignments_unarchive_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - exam-assignments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentDetail'
+          description: ''
+  /api/v1/exam-assignments/summary:
+    get:
+      operationId: v1_exam_assignments_summary_retrieve
+      description: Role doirasidagi arxivlanmagan assignment kartochka hisoblari.
+      tags:
+      - exam-assignments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentSummary'
           description: ''
   /api/v1/exams:
     get:
@@ -1726,6 +2604,23 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExamDuplicateResponse'
           description: ''
+  /api/v1/exams/summary:
+    get:
+      operationId: v1_exams_summary_retrieve
+      description: |-
+        Imtihonlar kutubxonasi. Tahrirlash/o‘chirish — muallif yoki Super Admin;
+        `duplicate` — kursga biriktirilgan har qanday teacher.
+      tags:
+      - exams
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExamLibrarySummary'
+          description: ''
   /api/v1/grading/pending:
     get:
       operationId: v1_grading_pending_list
@@ -1793,6 +2688,541 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedPendingAttemptList'
           description: ''
+  /api/v1/groups:
+    get:
+      operationId: v1_groups_list
+      parameters:
+      - in: query
+        name: courseId
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: course_id
+        schema:
+          type: string
+          format: uuid
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: q
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - ACTIVE
+          - ARCHIVED
+        description: |-
+          * `ACTIVE` - Active
+          * `ARCHIVED` - Archived
+      tags:
+      - group-directory
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedGroupList'
+          description: ''
+    post:
+      operationId: v1_groups_create
+      tags:
+      - group-directory
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupDirectoryWriteRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+          description: ''
+  /api/v1/groups/{id}:
+    get:
+      operationId: v1_groups_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - group-directory
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetail'
+          description: ''
+    patch:
+      operationId: v1_groups_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - group-directory
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedGroupUpdateRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetail'
+          description: ''
+  /api/v1/groups/{id}/archive:
+    post:
+      operationId: v1_groups_archive_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - group-directory
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+          description: ''
+  /api/v1/groups/{id}/eligible-students:
+    get:
+      operationId: v1_groups_eligible_students_list
+      parameters:
+      - in: query
+        name: courseId
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: course_id
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: q
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - ACTIVE
+          - ARCHIVED
+        description: |-
+          * `ACTIVE` - Active
+          * `ARCHIVED` - Archived
+      tags:
+      - group-directory
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserBriefList'
+          description: ''
+  /api/v1/groups/{id}/restore:
+    post:
+      operationId: v1_groups_restore_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - group-directory
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+          description: ''
+  /api/v1/groups/{id}/status:
+    put:
+      operationId: v1_groups_status_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - group-directory
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupStatusRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetail'
+          description: ''
+  /api/v1/groups/{id}/students:
+    post:
+      operationId: v1_groups_students_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - group-directory
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupStudentCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupStudent'
+          description: ''
+  /api/v1/groups/{id}/students/{student_id}:
+    delete:
+      operationId: v1_groups_students_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      - in: path
+        name: student_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - group-directory
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: Student guruhdan chiqarildi.
+  /api/v1/groups/summary:
+    get:
+      operationId: v1_groups_summary_retrieve
+      tags:
+      - group-directory
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDirectorySummary'
+          description: ''
+  /api/v1/notifications:
+    get:
+      operationId: v1_notifications_list
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: type
+        schema:
+          type: string
+          enum:
+          - ASSIGNMENT
+          - RESULT
+          - SYSTEM
+        description: |-
+          * `ASSIGNMENT` - Assignment
+          * `RESULT` - Result
+          * `SYSTEM` - System
+      - in: query
+        name: unread_only
+        schema:
+          type: boolean
+      tags:
+      - notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNotificationList'
+          description: ''
+  /api/v1/notifications/{id}:
+    get:
+      operationId: v1_notifications_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+          description: ''
+  /api/v1/notifications/{id}/mark-read:
+    post:
+      operationId: v1_notifications_mark_read_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+          description: ''
+  /api/v1/notifications/mark-all-read:
+    post:
+      operationId: v1_notifications_mark_all_read_create
+      tags:
+      - notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkAllReadResponse'
+          description: ''
+  /api/v1/notifications/summary:
+    get:
+      operationId: v1_notifications_summary_retrieve
+      tags:
+      - notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSummary'
+          description: ''
+  /api/v1/profile:
+    get:
+      operationId: v1_profile_retrieve
+      tags:
+      - profile
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUser'
+          description: ''
+    patch:
+      operationId: v1_profile_partial_update
+      tags:
+      - profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedProfileUpdateRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUser'
+          description: ''
+  /api/v1/profile/change-password:
+    post:
+      operationId: v1_profile_change_password_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeOwnPasswordRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: Password o‘zgartirildi.
+  /api/v1/profile/photo:
+    post:
+      operationId: v1_profile_photo_create
+      tags:
+      - profile
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AvatarUploadRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AvatarUploadRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvatarResponse'
+          description: ''
+    delete:
+      operationId: v1_profile_photo_destroy
+      tags:
+      - profile
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: Profil rasmi o‘chirildi.
   /api/v1/questions:
     get:
       operationId: v1_questions_list
@@ -1844,9 +3274,11 @@ paths:
           enum:
           - ACTIVE
           - ARCHIVED
+          - DELETED
         description: |-
           * `ACTIVE` - Active
           * `ARCHIVED` - Archived
+          * `DELETED` - Deleted
       - in: query
         name: type
         schema:
@@ -1990,6 +3422,44 @@ paths:
               schema:
                 $ref: '#/components/schemas/QuestionDetail'
           description: ''
+  /api/v1/questions/{id}/restore:
+    post:
+      operationId: v1_questions_restore_create
+      description: Savollar banki. Teacher boshqa teacher savolini ko‘radi, lekin
+        o‘zgartira olmaydi.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - questions
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionDetail'
+          description: ''
+  /api/v1/questions/summary:
+    get:
+      operationId: v1_questions_summary_retrieve
+      description: Role doirasidagi question bank statistika kartalari.
+      tags:
+      - questions
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionBankSummary'
+          description: ''
   /api/v1/results:
     get:
       operationId: v1_results_list
@@ -2093,6 +3563,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedResultList'
           description: ''
+  /api/v1/results/summary:
+    get:
+      operationId: v1_results_summary_retrieve
+      description: Results page kartalari va grading progress. List bilan bir xil
+        filter/searchlarni oladi.
+      tags:
+      - results
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultSummary'
+          description: ''
   /api/v1/student/dashboard:
     get:
       operationId: v1_student_dashboard_retrieve
@@ -2111,6 +3597,15 @@ paths:
     get:
       operationId: v1_students_list
       parameters:
+      - in: query
+        name: course_id
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: first_letter
+        schema:
+          type: string
       - name: limit
         required: false
         in: query
@@ -2141,10 +3636,12 @@ paths:
           type: string
           enum:
           - ACTIVE
+          - DELETED
           - INACTIVE
         description: |-
           * `ACTIVE` - Active
           * `INACTIVE` - Inactive
+          * `DELETED` - Deleted
       tags:
       - students
       security:
@@ -2154,7 +3651,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedUserList'
+                $ref: '#/components/schemas/PaginatedStudentDirectoryList'
           description: ''
   /api/v1/students/{id}:
     get:
@@ -2175,7 +3672,37 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/StudentDirectory'
+          description: ''
+  /api/v1/students/me/courses:
+    get:
+      operationId: v1_students_me_courses_list
+      tags:
+      - student-courses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AcademicStudentCourseCard'
+          description: ''
+  /api/v1/students/summary:
+    get:
+      operationId: v1_students_summary_retrieve
+      tags:
+      - students
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentDirectorySummary'
           description: ''
   /api/v1/teacher/dashboard:
     get:
@@ -2195,6 +3722,11 @@ paths:
     get:
       operationId: v1_teachers_list
       parameters:
+      - in: query
+        name: course_id
+        schema:
+          type: string
+          format: uuid
       - name: limit
         required: false
         in: query
@@ -2225,10 +3757,12 @@ paths:
           type: string
           enum:
           - ACTIVE
+          - DELETED
           - INACTIVE
         description: |-
           * `ACTIVE` - Active
           * `INACTIVE` - Inactive
+          * `DELETED` - Deleted
       tags:
       - teachers
       security:
@@ -2238,7 +3772,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedUserList'
+                $ref: '#/components/schemas/PaginatedTeacherDirectoryList'
           description: ''
   /api/v1/teachers/{id}:
     get:
@@ -2259,61 +3793,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/TeacherDirectory'
           description: ''
-  /api/v1/users:
+  /api/v1/teachers/summary:
     get:
-      operationId: v1_users_list
-      description: Foydalanuvchilarni boshqarish. Hard delete yo‘q — `deactivate`.
-      parameters:
-      - name: limit
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
-        schema:
-          type: string
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - in: query
-        name: role
-        schema:
-          type: string
-          enum:
-          - STUDENT
-          - SUPER_ADMIN
-          - TEACHER
-        description: |-
-          * `SUPER_ADMIN` - Super Admin
-          * `TEACHER` - Teacher
-          * `STUDENT` - Student
-      - name: search
-        required: false
-        in: query
-        description: A search term.
-        schema:
-          type: string
-      - in: query
-        name: status
-        schema:
-          type: string
-          enum:
-          - ACTIVE
-          - INACTIVE
-        description: |-
-          * `ACTIVE` - Active
-          * `INACTIVE` - Inactive
+      operationId: v1_teachers_summary_retrieve
       tags:
-      - users
+      - teachers
       security:
       - jwtAuth: []
       responses:
@@ -2321,146 +3807,98 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedUserList'
+                $ref: '#/components/schemas/TeacherDirectorySummary'
           description: ''
-    post:
-      operationId: v1_users_create
-      description: Foydalanuvchilarni boshqarish. Hard delete yo‘q — `deactivate`.
-      tags:
-      - users
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserCreateRequest'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-          description: ''
-  /api/v1/users/{id}:
-    get:
-      operationId: v1_users_retrieve
-      description: Foydalanuvchilarni boshqarish. Hard delete yo‘q — `deactivate`.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
-        required: true
-      tags:
-      - users
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-          description: ''
-    patch:
-      operationId: v1_users_partial_update
-      description: Foydalanuvchilarni boshqarish. Hard delete yo‘q — `deactivate`.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
-        required: true
-      tags:
-      - users
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedUserUpdateRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-          description: ''
-  /api/v1/users/{id}/activate:
-    post:
-      operationId: v1_users_activate_create
-      description: Foydalanuvchilarni boshqarish. Hard delete yo‘q — `deactivate`.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
-        required: true
-      tags:
-      - users
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-          description: ''
-  /api/v1/users/{id}/deactivate:
-    post:
-      operationId: v1_users_deactivate_create
-      description: Foydalanuvchilarni boshqarish. Hard delete yo‘q — `deactivate`.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
-        required: true
-      tags:
-      - users
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-          description: ''
-  /api/v1/users/{id}/set-password:
-    post:
-      operationId: v1_users_set_password_create
-      description: Foydalanuvchilarni boshqarish. Hard delete yo‘q — `deactivate`.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
-        required: true
-      tags:
-      - users
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetPasswordRequest'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: Parol o‘zgartirildi.
 components:
   schemas:
+    AcademicStudentCourseCard:
+      type: object
+      properties:
+        course_id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+        teacher_names:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        module_count:
+          type: integer
+          readOnly: true
+        progress:
+          type: number
+          format: double
+          nullable: true
+          readOnly: true
+        next_step:
+          type: string
+          readOnly: true
+      required:
+      - course_id
+      - description
+      - module_count
+      - next_step
+      - progress
+      - status
+      - teacher_names
+      - title
+    AccountActivity:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+        action:
+          type: string
+        metadata: {}
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - action
+      - actor_id
+      - created_at
+      - id
+      - metadata
+    AccountCourse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+        teacher_type:
+          type: string
+        enrolled_at:
+          type: string
+          format: date-time
+        groups_count:
+          type: integer
+        students_count:
+          type: integer
+      required:
+      - groups_count
+      - id
+      - name
+      - status
+      - students_count
     ActiveArchivedStatusEnum:
       enum:
       - ACTIVE
@@ -2469,6 +3907,214 @@ components:
       description: |-
         * `ACTIVE` - Active
         * `ARCHIVED` - Archived
+    AdminAccount:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        username:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/UserRoleEnum'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/UserStatusEnum'
+          readOnly: true
+        phone_number:
+          type: string
+          readOnly: true
+        location:
+          type: string
+          readOnly: true
+        avatar_url:
+          type: string
+          readOnly: true
+        must_change_password:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        version:
+          type: integer
+          readOnly: true
+      required:
+      - avatar_url
+      - created_at
+      - email
+      - full_name
+      - id
+      - location
+      - must_change_password
+      - phone_number
+      - role
+      - status
+      - updated_at
+      - username
+      - version
+    AdminAccountCreateRequest:
+      type: object
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        role:
+          $ref: '#/components/schemas/CreatableUserRoleEnum'
+        phone_number:
+          oneOf:
+          - type: string
+            default: ''
+            pattern: ^\+998\d{9}$
+          - type: string
+            maxLength: 0
+        location:
+          type: string
+          default: ''
+          maxLength: 255
+      required:
+      - email
+      - full_name
+      - role
+    AdminAccountCreateResponse:
+      type: object
+      properties:
+        account:
+          $ref: '#/components/schemas/AdminAccountDetail'
+        issued_credentials:
+          $ref: '#/components/schemas/IssuedCredentials'
+      required:
+      - account
+      - issued_credentials
+    AdminAccountDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        username:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/UserRoleEnum'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/UserStatusEnum'
+          readOnly: true
+        phone_number:
+          type: string
+          readOnly: true
+        location:
+          type: string
+          readOnly: true
+        avatar_url:
+          type: string
+          readOnly: true
+        must_change_password:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        version:
+          type: integer
+          readOnly: true
+        courses:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+        groups:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+        exam_stats:
+          type: object
+          additionalProperties:
+            type: integer
+          readOnly: true
+        last_active:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - avatar_url
+      - courses
+      - created_at
+      - email
+      - exam_stats
+      - full_name
+      - groups
+      - id
+      - last_active
+      - location
+      - must_change_password
+      - phone_number
+      - role
+      - status
+      - updated_at
+      - username
+      - version
+    AdminAccountStatusRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/AdminAccountStatusStatusEnum'
+        version:
+          type: integer
+          minimum: 1
+      required:
+      - status
+      - version
+    AdminAccountStatusStatusEnum:
+      enum:
+      - ACTIVE
+      - INACTIVE
+      type: string
+      description: |-
+        * `ACTIVE` - ACTIVE
+        * `INACTIVE` - INACTIVE
     AdminDashboard:
       type: object
       properties:
@@ -2496,11 +4142,43 @@ components:
           type: number
           format: double
           nullable: true
+        question_statistics:
+          $ref: '#/components/schemas/QuestionStatistics'
+        course_overview:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourseOverview'
+        summary:
+          $ref: '#/components/schemas/DashboardSummary'
+        recent_exams:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecentExam'
+        recent_results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecentResult'
+        exam_activity:
+          $ref: '#/components/schemas/ExamActivity'
+        exam_statistics:
+          $ref: '#/components/schemas/ExamStatistics'
+        platform_activity:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformActivity'
       required:
       - active_assignments
       - average_score
       - completed_assignments
+      - course_overview
+      - exam_activity
+      - exam_statistics
       - pass_rate
+      - platform_activity
+      - question_statistics
+      - recent_exams
+      - recent_results
+      - summary
       - total_courses
       - total_exams
       - total_modules
@@ -2521,6 +4199,9 @@ components:
         text_answer:
           type: string
           readOnly: true
+        revision:
+          type: integer
+          readOnly: true
         updated_at:
           type: string
           format: date-time
@@ -2528,12 +4209,11 @@ components:
       required:
       - exam_question_id
       - option_ids
+      - revision
       - text_answer
       - updated_at
     AnswerInputRequest:
       type: object
-      description: 'Tanlovli savol: `option_ids` (bo‘sh ro‘yxat — tozalash). OPEN_ENDED:
-        `text_answer`.'
       properties:
         option_ids:
           type: array
@@ -2544,6 +4224,11 @@ components:
         text_answer:
           type: string
           maxLength: 20000
+        revision:
+          type: integer
+          minimum: 0
+      required:
+      - revision
     ArchivedResponse:
       type: object
       description: '`DELETE` obyekt arxivlanganda qaytadigan javob (faqat OpenAPI
@@ -2576,6 +4261,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/AudienceTypeEnum'
           readOnly: true
+        availability_type:
+          allOf:
+          - $ref: '#/components/schemas/AvailabilityTypeEnum'
+          readOnly: true
         groups:
           type: array
           items:
@@ -2602,6 +4291,26 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        result_review_mode:
+          allOf:
+          - $ref: '#/components/schemas/ResultReviewModeEnum'
+          readOnly: true
+        answer_review_released:
+          type: boolean
+          readOnly: true
+        answer_review_released_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        answer_review_released_by:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        internal_note:
+          type: string
+          readOnly: true
         status:
           allOf:
           - $ref: '#/components/schemas/AssignmentStatusEnum'
@@ -2613,6 +4322,14 @@ components:
         attempts_count:
           type: integer
           readOnly: true
+        is_archived:
+          type: boolean
+          readOnly: true
+        archived_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -2621,9 +4338,17 @@ components:
           type: string
           format: date-time
           readOnly: true
+        version:
+          type: integer
+          readOnly: true
       required:
+      - answer_review_released
+      - answer_review_released_at
+      - answer_review_released_by
+      - archived_at
       - attempts_count
       - audience_type
+      - availability_type
       - course
       - created_at
       - duration_minutes
@@ -2631,13 +4356,17 @@ components:
       - exam
       - groups
       - id
+      - internal_note
+      - is_archived
       - max_attempts
       - published_by
+      - result_review_mode
       - start_at
       - status
       - stored_status
       - students
       - updated_at
+      - version
     AssignmentCreateRequest:
       type: object
       description: '`audience_type` bilan `group_ids` / `student_ids` mosligi (shakl
@@ -2648,6 +4377,8 @@ components:
           format: uuid
         audience_type:
           $ref: '#/components/schemas/AudienceTypeEnum'
+        availability_type:
+          $ref: '#/components/schemas/AvailabilityTypeEnum'
         group_ids:
           type: array
           items:
@@ -2661,9 +4392,6 @@ components:
         start_at:
           type: string
           format: date-time
-        end_at:
-          type: string
-          format: date-time
           nullable: true
         duration_minutes:
           type: integer
@@ -2673,16 +4401,26 @@ components:
           type: integer
           minimum: 1
           nullable: true
+        end_at:
+          type: string
+          format: date-time
+          nullable: true
         is_draft:
           type: boolean
           default: false
+        result_review_mode:
+          allOf:
+          - $ref: '#/components/schemas/ResultReviewModeEnum'
+          default: SCORE_ONLY
+        internal_note:
+          type: string
+          default: ''
       required:
       - audience_type
       - duration_minutes
       - end_at
       - exam_id
       - max_attempts
-      - start_at
     AssignmentDetail:
       type: object
       properties:
@@ -2706,6 +4444,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/AudienceTypeEnum'
           readOnly: true
+        availability_type:
+          allOf:
+          - $ref: '#/components/schemas/AvailabilityTypeEnum'
+          readOnly: true
         groups:
           type: array
           items:
@@ -2732,6 +4474,26 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        result_review_mode:
+          allOf:
+          - $ref: '#/components/schemas/ResultReviewModeEnum'
+          readOnly: true
+        answer_review_released:
+          type: boolean
+          readOnly: true
+        answer_review_released_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        answer_review_released_by:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        internal_note:
+          type: string
+          readOnly: true
         status:
           allOf:
           - $ref: '#/components/schemas/AssignmentStatusEnum'
@@ -2743,6 +4505,14 @@ components:
         attempts_count:
           type: integer
           readOnly: true
+        is_archived:
+          type: boolean
+          readOnly: true
+        archived_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -2751,27 +4521,51 @@ components:
           type: string
           format: date-time
           readOnly: true
+        version:
+          type: integer
+          readOnly: true
         eligible_students_count:
           type: integer
           readOnly: true
+        can_edit:
+          type: boolean
+          readOnly: true
+        edit_mode:
+          type: string
+          readOnly: true
+        can_delete:
+          type: boolean
+          readOnly: true
       required:
+      - answer_review_released
+      - answer_review_released_at
+      - answer_review_released_by
+      - archived_at
       - attempts_count
       - audience_type
+      - availability_type
+      - can_delete
+      - can_edit
       - course
       - created_at
       - duration_minutes
+      - edit_mode
       - eligible_students_count
       - end_at
       - exam
       - groups
       - id
+      - internal_note
+      - is_archived
       - max_attempts
       - published_by
+      - result_review_mode
       - start_at
       - status
       - stored_status
       - students
       - updated_at
+      - version
     AssignmentGroup:
       type: object
       properties:
@@ -2793,6 +4587,7 @@ components:
       - PAUSED
       - COMPLETED
       - CANCELLED
+      - ARCHIVED
       type: string
       description: |-
         * `DRAFT` - Draft
@@ -2801,6 +4596,7 @@ components:
         * `PAUSED` - Paused
         * `COMPLETED` - Completed
         * `CANCELLED` - Cancelled
+        * `ARCHIVED` - Archived
     AssignmentStudent:
       type: object
       properties:
@@ -2819,11 +4615,149 @@ components:
       - email
       - full_name
       - id
+    AssignmentSummary:
+      type: object
+      properties:
+        assignments:
+          type: integer
+        active:
+          type: integer
+        scheduled:
+          type: integer
+        paused:
+          type: integer
+      required:
+      - active
+      - assignments
+      - paused
+      - scheduled
+    AssignmentTransitionRequest:
+      type: object
+      properties:
+        action:
+          $ref: '#/components/schemas/TransitionActionEnum'
+        version:
+          type: integer
+          minimum: 1
+      required:
+      - action
     AttemptDetail:
       oneOf:
       - $ref: '#/components/schemas/StudentAttempt'
       - $ref: '#/components/schemas/AttemptResult'
       - $ref: '#/components/schemas/AttemptStaffDetail'
+    AttemptEvent:
+      type: object
+      properties:
+        event_id:
+          type: string
+          format: uuid
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/AttemptEventTypeEnum'
+          readOnly: true
+        client_at:
+          type: string
+          format: date-time
+          readOnly: true
+        received_at:
+          type: string
+          format: date-time
+          readOnly: true
+        details:
+          readOnly: true
+        counts_violation:
+          type: boolean
+          readOnly: true
+        focus_violations:
+          type: integer
+          readOnly: true
+        action:
+          allOf:
+          - $ref: '#/components/schemas/AttemptEventActionEnum'
+          readOnly: true
+      required:
+      - action
+      - client_at
+      - counts_violation
+      - details
+      - event_id
+      - focus_violations
+      - received_at
+      - type
+    AttemptEventActionEnum:
+      enum:
+      - WARN
+      - SUBMIT
+      type: string
+      description: |-
+        * `WARN` - Warn
+        * `SUBMIT` - Submit
+    AttemptEventInputRequest:
+      type: object
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/AttemptEventTypeEnum'
+        client_at:
+          type: string
+          format: date-time
+        details:
+          type: object
+          additionalProperties: {}
+      required:
+      - client_at
+      - event_id
+      - type
+    AttemptEventResponse:
+      type: object
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        focus_violations:
+          type: integer
+          minimum: 0
+        threshold:
+          type: integer
+          minimum: 1
+        action:
+          $ref: '#/components/schemas/AttemptEventActionEnum'
+        status:
+          $ref: '#/components/schemas/AttemptStatusEnum'
+        submission_reason:
+          type: string
+          nullable: true
+      required:
+      - action
+      - event_id
+      - focus_violations
+      - status
+      - submission_reason
+      - threshold
+    AttemptEventTypeEnum:
+      enum:
+      - TAB_HIDDEN
+      - TAB_VISIBLE
+      - FULLSCREEN_EXIT
+      - FULLSCREEN_RETURN
+      - FULLSCREEN_DECLINED
+      - COPY
+      - CUT
+      - PASTE
+      type: string
+      description: |-
+        * `TAB_HIDDEN` - Tab hidden
+        * `TAB_VISIBLE` - Tab visible
+        * `FULLSCREEN_EXIT` - Fullscreen exit
+        * `FULLSCREEN_RETURN` - Fullscreen return
+        * `FULLSCREEN_DECLINED` - Fullscreen declined
+        * `COPY` - Copy
+        * `CUT` - Cut
+        * `PASTE` - Paste
     AttemptList:
       type: object
       properties:
@@ -2892,6 +4826,15 @@ components:
           type: boolean
           readOnly: true
           nullable: true
+        focus_violations:
+          type: integer
+          readOnly: true
+        finalization_reason:
+          readOnly: true
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/FinalizationReasonEnum'
+          - $ref: '#/components/schemas/NullEnum'
       required:
       - assignment_id
       - attempt_number
@@ -2899,6 +4842,8 @@ components:
       - deadline_at
       - exam_id
       - exam_title
+      - finalization_reason
+      - focus_violations
       - id
       - passed
       - percentage
@@ -2909,7 +4854,6 @@ components:
       - submitted_at
     AttemptResult:
       type: object
-      description: 'Student uchun yakunlangan attempt: faqat natija (to‘g‘ri javoblarsiz).'
       properties:
         id:
           type: string
@@ -2964,14 +4908,39 @@ components:
           type: boolean
           readOnly: true
           nullable: true
+        focus_violations:
+          type: integer
+          readOnly: true
+        finalization_reason:
+          readOnly: true
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/FinalizationReasonEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        review_mode:
+          type: string
+          readOnly: true
+        answer_review_released:
+          type: boolean
+          readOnly: true
+        answers:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentResultAnswer'
+          readOnly: true
       required:
+      - answer_review_released
+      - answers
       - assignment_id
       - attempt_number
       - exam_id
       - exam_title
+      - finalization_reason
+      - focus_violations
       - id
       - passed
       - percentage
+      - review_mode
       - score
       - started_at
       - status
@@ -3044,10 +5013,24 @@ components:
           type: boolean
           readOnly: true
           nullable: true
+        focus_violations:
+          type: integer
+          readOnly: true
+        finalization_reason:
+          readOnly: true
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/FinalizationReasonEnum'
+          - $ref: '#/components/schemas/NullEnum'
         answers:
           type: array
           items:
             $ref: '#/components/schemas/StaffAnswer'
+          readOnly: true
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttemptEvent'
           readOnly: true
       required:
       - answers
@@ -3055,8 +5038,11 @@ components:
       - attempt_number
       - course
       - deadline_at
+      - events
       - exam_id
       - exam_title
+      - finalization_reason
+      - focus_violations
       - id
       - passed
       - percentage
@@ -3126,6 +5112,60 @@ components:
         * `ALL_COURSE_STUDENTS` - All course students
         * `GROUPS` - Groups
         * `SPECIFIC_STUDENTS` - Specific students
+    AvailabilityTypeEnum:
+      enum:
+      - TIME_LIMITED
+      - OPEN_ENDED
+      type: string
+      description: |-
+        * `TIME_LIMITED` - Time limited
+        * `OPEN_ENDED` - Open ended
+    AvatarResponse:
+      type: object
+      properties:
+        avatar_url:
+          oneOf:
+          - type: string
+            format: uri
+          - type: string
+            maxLength: 0
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - avatar_url
+      - updated_at
+    AvatarUploadRequest:
+      type: object
+      properties:
+        image:
+          type: string
+          format: binary
+          writeOnly: true
+          description: Multipart rasm fayli. Eski klientlar uchun `avatar` kaliti
+            ham qabul qilinadi.
+      required:
+      - image
+    ChangeOwnPasswordRequest:
+      type: object
+      properties:
+        current_password:
+          type: string
+          writeOnly: true
+          minLength: 1
+        new_password:
+          type: string
+          writeOnly: true
+          minLength: 1
+          maxLength: 128
+        confirm_new_password:
+          type: string
+          writeOnly: true
+          minLength: 1
+          maxLength: 128
+      required:
+      - current_password
+      - new_password
     CourseBrief:
       type: object
       properties:
@@ -3138,12 +5178,34 @@ components:
           readOnly: true
         status:
           allOf:
-          - $ref: '#/components/schemas/ActiveArchivedStatusEnum'
+          - $ref: '#/components/schemas/CourseStatusEnum'
           readOnly: true
       required:
       - id
       - name
       - status
+    CourseCatalogSummary:
+      type: object
+      properties:
+        total_courses:
+          type: integer
+        active_courses:
+          type: integer
+        draft_courses:
+          type: integer
+        archived_courses:
+          type: integer
+        learning_modules:
+          type: integer
+        course_enrollments:
+          type: integer
+      required:
+      - active_courses
+      - archived_courses
+      - course_enrollments
+      - draft_courses
+      - learning_modules
+      - total_courses
     CourseDetail:
       type: object
       properties:
@@ -3159,7 +5221,15 @@ components:
           readOnly: true
         status:
           allOf:
-          - $ref: '#/components/schemas/ActiveArchivedStatusEnum'
+          - $ref: '#/components/schemas/CourseStatusEnum'
+          readOnly: true
+        version:
+          type: integer
+          readOnly: true
+        teachers:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserBrief'
           readOnly: true
         teachers_count:
           type: integer
@@ -3197,21 +5267,36 @@ components:
           items:
             $ref: '#/components/schemas/UserBrief'
           readOnly: true
+        modules:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+        actions:
+          type: object
+          additionalProperties:
+            type: boolean
+          readOnly: true
       required:
+      - actions
       - created_at
       - description
       - exams_count
       - groups_count
       - id
       - main_teacher
+      - modules
       - modules_count
       - name
       - questions_count
       - status
       - students_count
       - support_teachers
+      - teachers
       - teachers_count
       - updated_at
+      - version
     CourseList:
       type: object
       properties:
@@ -3227,7 +5312,15 @@ components:
           readOnly: true
         status:
           allOf:
-          - $ref: '#/components/schemas/ActiveArchivedStatusEnum'
+          - $ref: '#/components/schemas/CourseStatusEnum'
+          readOnly: true
+        version:
+          type: integer
+          readOnly: true
+        teachers:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserBrief'
           readOnly: true
         teachers_count:
           type: integer
@@ -3266,8 +5359,85 @@ components:
       - questions_count
       - status
       - students_count
+      - teachers
       - teachers_count
       - updated_at
+      - version
+    CourseMutationRequest:
+      type: object
+      description: TZ course payload; camelCase va eski snake_case nomlarini qabul
+        qiladi.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/CourseMutationStatusEnum'
+        main_teacher_id:
+          type: string
+          format: uuid
+          nullable: true
+        teacher_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        version:
+          type: integer
+          minimum: 1
+    CourseMutationStatusEnum:
+      enum:
+      - DRAFT
+      - ACTIVE
+      type: string
+      description: |-
+        * `DRAFT` - DRAFT
+        * `ACTIVE` - ACTIVE
+    CourseOverview:
+      type: object
+      properties:
+        course_id:
+          type: string
+          format: uuid
+        course_name:
+          type: string
+        students_count:
+          type: integer
+        exams_count:
+          type: integer
+        average_score:
+          type: number
+          format: double
+          nullable: true
+      required:
+      - average_score
+      - course_id
+      - course_name
+      - exams_count
+      - students_count
+    CourseStatusEnum:
+      enum:
+      - DRAFT
+      - ACTIVE
+      - ARCHIVED
+      type: string
+      description: |-
+        * `DRAFT` - Draft
+        * `ACTIVE` - Active
+        * `ARCHIVED` - Archived
+    CourseStatusRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/CourseStatusEnum'
+        version:
+          type: integer
+          minimum: 1
+      required:
+      - status
     CourseTeacher:
       type: object
       properties:
@@ -3311,25 +5481,118 @@ components:
       description: |-
         * `MAIN` - Main
         * `SUPPORT` - Support
-    CourseWriteRequest:
+    CoursesSummary:
       type: object
       properties:
-        name:
-          type: string
-          minLength: 1
-          maxLength: 255
-        description:
-          type: string
+        total:
+          type: integer
+        active:
+          type: integer
       required:
-      - name
+      - active
+      - total
     CreatableUserRoleEnum:
       enum:
       - TEACHER
+      - SUPPORT_TEACHER
       - STUDENT
       type: string
       description: |-
         * `TEACHER` - Teacher
+        * `SUPPORT_TEACHER` - Support Teacher
         * `STUDENT` - Student
+    CurrentUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        username:
+          type: string
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/UserRoleEnum'
+          readOnly: true
+        avatar_url:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/UserStatusEnum'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        phone_number:
+          type: string
+          readOnly: true
+        must_change_password:
+          type: boolean
+          readOnly: true
+        permissions:
+          type: object
+          additionalProperties:
+            type: boolean
+          readOnly: true
+      required:
+      - avatar_url
+      - created_at
+      - email
+      - full_name
+      - id
+      - must_change_password
+      - permissions
+      - phone_number
+      - role
+      - status
+      - updated_at
+      - username
+    DashboardSummary:
+      type: object
+      properties:
+        students:
+          $ref: '#/components/schemas/GrowthSummary'
+        teachers:
+          $ref: '#/components/schemas/GrowthSummary'
+        courses:
+          $ref: '#/components/schemas/CoursesSummary'
+        questions:
+          $ref: '#/components/schemas/QuestionsSummary'
+        exams:
+          $ref: '#/components/schemas/ExamsSummary'
+        upcoming_assignments:
+          $ref: '#/components/schemas/UpcomingAssignmentsSummary'
+      required:
+      - courses
+      - exams
+      - questions
+      - students
+      - teachers
+      - upcoming_assignments
+    DifficultyEnum:
+      enum:
+      - EASY
+      - MEDIUM
+      - HARD
+      type: string
+      description: |-
+        * `EASY` - Easy
+        * `MEDIUM` - Medium
+        * `HARD` - Hard
     Enrollment:
       type: object
       properties:
@@ -3349,9 +5612,26 @@ components:
           type: string
           format: date-time
           readOnly: true
+        group:
+          allOf:
+          - $ref: '#/components/schemas/EnrollmentGroup'
+          nullable: true
+          readOnly: true
+        progress:
+          type: number
+          format: double
+          nullable: true
+          readOnly: true
+        result_summary:
+          allOf:
+          - $ref: '#/components/schemas/EnrollmentResultSummary'
+          readOnly: true
       required:
       - enrolled_at
+      - group
       - id
+      - progress
+      - result_summary
       - status
       - student
     EnrollmentCreateRequest:
@@ -3362,6 +5642,39 @@ components:
           format: uuid
       required:
       - student_id
+    EnrollmentGroup:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required:
+      - id
+      - name
+    EnrollmentResultSummary:
+      type: object
+      properties:
+        attempts_count:
+          type: integer
+        graded_count:
+          type: integer
+        passed_count:
+          type: integer
+        average_percentage:
+          type: number
+          format: double
+          maximum: 1000
+          minimum: -1000
+          exclusiveMaximum: true
+          exclusiveMinimum: true
+          nullable: true
+      required:
+      - attempts_count
+      - average_percentage
+      - graded_count
+      - passed_count
     EnrollmentStatusEnum:
       enum:
       - ACTIVE
@@ -3372,6 +5685,40 @@ components:
         * `ACTIVE` - Active
         * `COMPLETED` - Completed
         * `REMOVED` - Removed
+    ExamActivity:
+      type: object
+      properties:
+        period_days:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExamActivityItem'
+        current_total:
+          type: integer
+        previous_total:
+          type: integer
+        change_percentage:
+          type: number
+          format: double
+          nullable: true
+      required:
+      - change_percentage
+      - current_total
+      - items
+      - period_days
+      - previous_total
+    ExamActivityItem:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        completed_attempts:
+          type: integer
+      required:
+      - completed_attempts
+      - date
     ExamBrief:
       type: object
       properties:
@@ -3460,6 +5807,9 @@ components:
         questions_count:
           type: integer
           readOnly: true
+        modules_count:
+          type: integer
+          readOnly: true
         total_points:
           type: number
           format: double
@@ -3468,6 +5818,9 @@ components:
           exclusiveMaximum: true
           exclusiveMinimum: true
           readOnly: true
+        uses_count:
+          type: integer
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3475,6 +5828,9 @@ components:
         updated_at:
           type: string
           format: date-time
+          readOnly: true
+        version:
+          type: integer
           readOnly: true
         modules:
           type: array
@@ -3497,6 +5853,7 @@ components:
       - id
       - is_locked
       - modules
+      - modules_count
       - passing_score_percent
       - questions
       - questions_count
@@ -3504,6 +5861,8 @@ components:
       - title
       - total_points
       - updated_at
+      - uses_count
+      - version
     ExamDuplicateResponse:
       type: object
       properties:
@@ -3540,6 +5899,9 @@ components:
         questions_count:
           type: integer
           readOnly: true
+        modules_count:
+          type: integer
+          readOnly: true
         total_points:
           type: number
           format: double
@@ -3548,6 +5910,9 @@ components:
           exclusiveMaximum: true
           exclusiveMinimum: true
           readOnly: true
+        uses_count:
+          type: integer
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3555,6 +5920,9 @@ components:
         updated_at:
           type: string
           format: date-time
+          readOnly: true
+        version:
+          type: integer
           readOnly: true
         modules:
           type: array
@@ -3583,6 +5951,7 @@ components:
       - id
       - is_locked
       - modules
+      - modules_count
       - passing_score_percent
       - questions
       - questions_count
@@ -3591,6 +5960,24 @@ components:
       - title
       - total_points
       - updated_at
+      - uses_count
+      - version
+    ExamLibrarySummary:
+      type: object
+      properties:
+        total_exams:
+          type: integer
+        draft_exams:
+          type: integer
+        ready_exams:
+          type: integer
+        archived_exams:
+          type: integer
+      required:
+      - archived_exams
+      - draft_exams
+      - ready_exams
+      - total_exams
     ExamList:
       type: object
       properties:
@@ -3627,6 +6014,9 @@ components:
         questions_count:
           type: integer
           readOnly: true
+        modules_count:
+          type: integer
+          readOnly: true
         total_points:
           type: number
           format: double
@@ -3634,6 +6024,9 @@ components:
           minimum: -100000000
           exclusiveMaximum: true
           exclusiveMinimum: true
+          readOnly: true
+        uses_count:
+          type: integer
           readOnly: true
         created_at:
           type: string
@@ -3643,18 +6036,24 @@ components:
           type: string
           format: date-time
           readOnly: true
+        version:
+          type: integer
+          readOnly: true
       required:
       - course
       - created_at
       - created_by
       - description
       - id
+      - modules_count
       - passing_score_percent
       - questions_count
       - status
       - title
       - total_points
       - updated_at
+      - uses_count
+      - version
     ExamModule:
       type: object
       properties:
@@ -3713,14 +6112,58 @@ components:
         points:
           type: number
           format: double
-          maximum: 10000
-          minimum: 0.01
-          exclusiveMaximum: true
+          maximum: 100
+          minimum: 1
         position:
           type: integer
           minimum: 1
       required:
       - question_id
+    ExamStatistics:
+      type: object
+      properties:
+        completed_attempts:
+          type: integer
+        graded_attempts:
+          type: integer
+        passed_attempts:
+          type: integer
+        pass_rate:
+          type: number
+          format: double
+          nullable: true
+        average_score:
+          type: number
+          format: double
+          nullable: true
+        assigned_recipients:
+          type: integer
+        completed_recipients:
+          type: integer
+        completion_rate:
+          type: number
+          format: double
+          nullable: true
+        tracked_submissions:
+          type: integer
+        on_time_submissions:
+          type: integer
+        on_time_submission_rate:
+          type: number
+          format: double
+          nullable: true
+      required:
+      - assigned_recipients
+      - average_score
+      - completed_attempts
+      - completed_recipients
+      - completion_rate
+      - graded_attempts
+      - on_time_submission_rate
+      - on_time_submissions
+      - pass_rate
+      - passed_attempts
+      - tracked_submissions
     ExamStatusEnum:
       enum:
       - DRAFT
@@ -3739,6 +6182,28 @@ components:
       description: |-
         * `DRAFT` - Draft
         * `READY` - Ready
+    ExamsSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+        active_assignments:
+          type: integer
+      required:
+      - active_assignments
+      - total
+    FinalizationReasonEnum:
+      enum:
+      - USER_SUBMIT
+      - TIMEOUT
+      - FOCUS_LIMIT
+      - FULLSCREEN_DECLINED
+      type: string
+      description: |-
+        * `USER_SUBMIT` - User submit
+        * `TIMEOUT` - Timeout
+        * `FOCUS_LIMIT` - Focus violation limit
+        * `FULLSCREEN_DECLINED` - Fullscreen declined
     GradeResponse:
       type: object
       properties:
@@ -3759,8 +6224,32 @@ components:
         name:
           type: string
           readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ActiveArchivedStatusEnum'
+          readOnly: true
+        version:
+          type: integer
+          readOnly: true
+        course:
+          allOf:
+          - $ref: '#/components/schemas/GroupCourse'
+          readOnly: true
+        main_teacher:
+          allOf:
+          - $ref: '#/components/schemas/UserBrief'
+          readOnly: true
+        support_teacher:
+          allOf:
+          - $ref: '#/components/schemas/UserBrief'
+          readOnly: true
         students_count:
           type: integer
+          readOnly: true
+        students_preview:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserBrief'
           readOnly: true
         created_at:
           type: string
@@ -3771,11 +6260,142 @@ components:
           format: date-time
           readOnly: true
       required:
+      - course
       - created_at
       - id
+      - main_teacher
       - name
+      - status
       - students_count
+      - students_preview
+      - support_teacher
       - updated_at
+      - version
+    GroupCourse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - name
+    GroupDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ActiveArchivedStatusEnum'
+          readOnly: true
+        version:
+          type: integer
+          readOnly: true
+        course:
+          allOf:
+          - $ref: '#/components/schemas/GroupCourse'
+          readOnly: true
+        main_teacher:
+          allOf:
+          - $ref: '#/components/schemas/UserBrief'
+          readOnly: true
+        support_teacher:
+          allOf:
+          - $ref: '#/components/schemas/UserBrief'
+          readOnly: true
+        students_count:
+          type: integer
+          readOnly: true
+        students_preview:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserBrief'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        students:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserBrief'
+          readOnly: true
+      required:
+      - course
+      - created_at
+      - id
+      - main_teacher
+      - name
+      - status
+      - students
+      - students_count
+      - students_preview
+      - support_teacher
+      - updated_at
+      - version
+    GroupDirectorySummary:
+      type: object
+      properties:
+        active_groups:
+          type: integer
+        grouped_students:
+          type: integer
+        teaching_pairs:
+          type: integer
+        archived_groups:
+          type: integer
+      required:
+      - active_groups
+      - archived_groups
+      - grouped_students
+      - teaching_pairs
+    GroupDirectoryWriteRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        main_teacher_id:
+          type: string
+          format: uuid
+          nullable: true
+        support_teacher_id:
+          type: string
+          format: uuid
+          nullable: true
+        course_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/ActiveArchivedStatusEnum'
+      required:
+      - course_id
+      - name
+    GroupStatusRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/ActiveArchivedStatusEnum'
+        version:
+          type: integer
+          minimum: 1
+      required:
+      - status
     GroupStudent:
       type: object
       properties:
@@ -3810,21 +6430,73 @@ components:
           type: string
           minLength: 1
           maxLength: 255
+        main_teacher_id:
+          type: string
+          format: uuid
+          nullable: true
+        support_teacher_id:
+          type: string
+          format: uuid
+          nullable: true
       required:
       - name
+    GrowthSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+        added_this_month:
+          type: integer
+      required:
+      - added_this_month
+      - total
+    IssuedCredentials:
+      type: object
+      properties:
+        account_id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+        temporary_password:
+          type: string
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+      required:
+      - account_id
+      - email
+      - expires_at
+      - full_name
+      - issued_at
+      - role
+      - temporary_password
+      - username
     LoginRequest:
       type: object
       properties:
-        email:
+        emailOrUsername:
           type: string
           writeOnly: true
           minLength: 1
+          description: Email yoki username. `email` va `email_or_username` legacy
+            aliaslari ham qabul qilinadi.
         password:
           type: string
           writeOnly: true
           minLength: 1
       required:
-      - email
+      - emailOrUsername
       - password
     LoginResponse:
       type: object
@@ -3836,8 +6508,11 @@ components:
           type: string
         refresh_token:
           type: string
+        must_change_password:
+          type: boolean
       required:
       - access_token
+      - must_change_password
       - refresh_token
       - user
     LogoutRequest:
@@ -3849,6 +6524,13 @@ components:
           minLength: 1
       required:
       - refresh_token
+    MarkAllReadResponse:
+      type: object
+      properties:
+        updated:
+          type: integer
+      required:
+      - updated
     Module:
       type: object
       properties:
@@ -3889,6 +6571,23 @@ components:
       - status
       - title
       - updated_at
+    ModuleOrderRequest:
+      type: object
+      properties:
+        module_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+      required:
+      - module_ids
+    ModuleStatusRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/ActiveArchivedStatusEnum'
+      required:
+      - status
     ModuleWriteRequest:
       type: object
       properties:
@@ -3903,6 +6602,144 @@ components:
           minimum: 1
       required:
       - title
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/NotificationTypeEnum'
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+        data:
+          readOnly: true
+        is_read:
+          type: boolean
+          readOnly: true
+        read_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - data
+      - id
+      - is_read
+      - message
+      - read_at
+      - title
+      - type
+    NotificationSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+        unread:
+          type: integer
+      required:
+      - total
+      - unread
+    NotificationTypeEnum:
+      enum:
+      - ASSIGNMENT
+      - RESULT
+      - SYSTEM
+      type: string
+      description: |-
+        * `ASSIGNMENT` - Assignment
+        * `RESULT` - Result
+        * `SYSTEM` - System
+    NullEnum:
+      enum:
+      - null
+    PaginatedAccountActivityList:
+      type: object
+      required:
+      - data
+      - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountActivity'
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+              example: 1
+            limit:
+              type: integer
+              example: 20
+            total:
+              type: integer
+              example: 125
+            total_pages:
+              type: integer
+              example: 7
+    PaginatedAccountCourseList:
+      type: object
+      required:
+      - data
+      - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountCourse'
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+              example: 1
+            limit:
+              type: integer
+              example: 20
+            total:
+              type: integer
+              example: 125
+            total_pages:
+              type: integer
+              example: 7
+    PaginatedAdminAccountList:
+      type: object
+      required:
+      - data
+      - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAccount'
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+              example: 1
+            limit:
+              type: integer
+              example: 20
+            total:
+              type: integer
+              example: 125
+            total_pages:
+              type: integer
+              example: 7
     PaginatedAssignmentList:
       type: object
       required:
@@ -4128,6 +6965,31 @@ components:
             total_pages:
               type: integer
               example: 7
+    PaginatedNotificationList:
+      type: object
+      required:
+      - data
+      - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+              example: 1
+            limit:
+              type: integer
+              example: 20
+            total:
+              type: integer
+              example: 125
+            total_pages:
+              type: integer
+              example: 7
     PaginatedPendingAttemptList:
       type: object
       required:
@@ -4203,7 +7065,7 @@ components:
             total_pages:
               type: integer
               example: 7
-    PaginatedUserList:
+    PaginatedStudentDirectoryList:
       type: object
       required:
       - data
@@ -4212,7 +7074,7 @@ components:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/User'
+            $ref: '#/components/schemas/StudentDirectory'
         pagination:
           type: object
           properties:
@@ -4228,12 +7090,83 @@ components:
             total_pages:
               type: integer
               example: 7
+    PaginatedTeacherDirectoryList:
+      type: object
+      required:
+      - data
+      - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherDirectory'
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+              example: 1
+            limit:
+              type: integer
+              example: 20
+            total:
+              type: integer
+              example: 125
+            total_pages:
+              type: integer
+              example: 7
+    PaginatedUserBriefList:
+      type: object
+      required:
+      - data
+      - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserBrief'
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+              example: 1
+            limit:
+              type: integer
+              example: 20
+            total:
+              type: integer
+              example: 125
+            total_pages:
+              type: integer
+              example: 7
+    PatchedAdminAccountUpdateRequest:
+      type: object
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        phone_number:
+          oneOf:
+          - type: string
+            pattern: ^\+998\d{9}$
+          - type: string
+            maxLength: 0
+        location:
+          type: string
+          maxLength: 255
+        version:
+          type: integer
+          minimum: 1
     PatchedAssignmentUpdateRequest:
       type: object
       description: PATCH. Audience o‘zgarsa `group_ids`/`student_ids` to‘liq almashtiriladi.
       properties:
         audience_type:
           $ref: '#/components/schemas/AudienceTypeEnum'
+        availability_type:
+          $ref: '#/components/schemas/AvailabilityTypeEnum'
         group_ids:
           type: array
           items:
@@ -4259,13 +7192,17 @@ components:
           type: integer
           minimum: 1
           nullable: true
-    PatchedCourseTeacherUpdateRequest:
+        result_review_mode:
+          $ref: '#/components/schemas/ResultReviewModeEnum'
+        internal_note:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+    PatchedCourseMutationRequest:
       type: object
-      properties:
-        type:
-          $ref: '#/components/schemas/CourseTeacherTypeEnum'
-    PatchedCourseWriteRequest:
-      type: object
+      description: TZ course payload; camelCase va eski snake_case nomlarini qabul
+        qiladi.
       properties:
         name:
           type: string
@@ -4273,6 +7210,25 @@ components:
           maxLength: 255
         description:
           type: string
+        status:
+          $ref: '#/components/schemas/CourseMutationStatusEnum'
+        main_teacher_id:
+          type: string
+          format: uuid
+          nullable: true
+        teacher_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        version:
+          type: integer
+          minimum: 1
+    PatchedCourseTeacherUpdateRequest:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/CourseTeacherTypeEnum'
     PatchedEnrollmentUpdateRequest:
       type: object
       properties:
@@ -4316,6 +7272,24 @@ components:
         teacher_feedback:
           type: string
           maxLength: 5000
+    PatchedGroupUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        main_teacher_id:
+          type: string
+          format: uuid
+          nullable: true
+        support_teacher_id:
+          type: string
+          format: uuid
+          nullable: true
+        version:
+          type: integer
+          minimum: 1
     PatchedGroupWriteRequest:
       type: object
       properties:
@@ -4323,6 +7297,14 @@ components:
           type: string
           minLength: 1
           maxLength: 255
+        main_teacher_id:
+          type: string
+          format: uuid
+          nullable: true
+        support_teacher_id:
+          type: string
+          format: uuid
+          nullable: true
     PatchedModuleWriteRequest:
       type: object
       properties:
@@ -4335,6 +7317,19 @@ components:
         position:
           type: integer
           minimum: 1
+    PatchedProfileUpdateRequest:
+      type: object
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        phone_number:
+          oneOf:
+          - type: string
+            pattern: ^\+?[0-9][0-9\s().-]{6,31}$
+          - type: string
+            maxLength: 0
     PatchedQuestionUpdateRequest:
       type: object
       description: PATCH. `options` yuborilsa — to‘liq almashtiriladi. `type` o‘zgarsa
@@ -4345,38 +7340,20 @@ components:
           format: uuid
         type:
           $ref: '#/components/schemas/QuestionTypeEnum'
+        difficulty:
+          $ref: '#/components/schemas/DifficultyEnum'
         text:
           type: string
           minLength: 1
         default_points:
           type: number
           format: double
-          maximum: 10000
-          minimum: 0.01
-          exclusiveMaximum: true
+          maximum: 100
+          minimum: 1
         options:
           type: array
           items:
             $ref: '#/components/schemas/QuestionOptionInputRequest'
-    PatchedUserUpdateRequest:
-      type: object
-      properties:
-        full_name:
-          type: string
-          minLength: 1
-          maxLength: 255
-        email:
-          type: string
-          format: email
-          minLength: 1
-          maxLength: 254
-        avatar_url:
-          oneOf:
-          - type: string
-            format: uri
-            maxLength: 500
-          - type: string
-            maxLength: 0
     PendingAttempt:
       type: object
       properties:
@@ -4445,6 +7422,15 @@ components:
           type: boolean
           readOnly: true
           nullable: true
+        focus_violations:
+          type: integer
+          readOnly: true
+        finalization_reason:
+          readOnly: true
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/FinalizationReasonEnum'
+          - $ref: '#/components/schemas/NullEnum'
         pending_answers_count:
           type: integer
           readOnly: true
@@ -4455,6 +7441,8 @@ components:
       - deadline_at
       - exam_id
       - exam_title
+      - finalization_reason
+      - focus_violations
       - id
       - passed
       - pending_answers_count
@@ -4464,6 +7452,57 @@ components:
       - status
       - student
       - submitted_at
+    PlatformActivity:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+      required:
+      - description
+      - occurred_at
+      - title
+      - type
+    QuestionBankSummary:
+      type: object
+      properties:
+        active_questions:
+          type: integer
+        choice_questions:
+          type: integer
+        open_ended:
+          type: integer
+        archived:
+          type: integer
+      required:
+      - active_questions
+      - archived
+      - choice_questions
+      - open_ended
+    QuestionCourseBrief:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/CourseStatusEnum'
+          readOnly: true
+      required:
+      - id
+      - name
+      - status
     QuestionCreateRequest:
       type: object
       properties:
@@ -4475,15 +7514,16 @@ components:
           format: uuid
         type:
           $ref: '#/components/schemas/QuestionTypeEnum'
+        difficulty:
+          $ref: '#/components/schemas/DifficultyEnum'
         text:
           type: string
           minLength: 1
         default_points:
           type: number
           format: double
-          maximum: 10000
-          minimum: 0.01
-          exclusiveMaximum: true
+          maximum: 100
+          minimum: 1
         options:
           type: array
           items:
@@ -4508,9 +7548,21 @@ components:
           type: string
           format: uuid
           readOnly: true
+        course:
+          allOf:
+          - $ref: '#/components/schemas/QuestionCourseBrief'
+          readOnly: true
+        module:
+          allOf:
+          - $ref: '#/components/schemas/QuestionModuleBrief'
+          readOnly: true
         type:
           allOf:
           - $ref: '#/components/schemas/QuestionTypeEnum'
+          readOnly: true
+        difficulty:
+          allOf:
+          - $ref: '#/components/schemas/DifficultyEnum'
           readOnly: true
         text:
           type: string
@@ -4525,7 +7577,7 @@ components:
           readOnly: true
         status:
           allOf:
-          - $ref: '#/components/schemas/ActiveArchivedStatusEnum'
+          - $ref: '#/components/schemas/QuestionStatusEnum'
           readOnly: true
         created_by:
           allOf:
@@ -4539,23 +7591,30 @@ components:
           type: string
           format: date-time
           readOnly: true
+        version:
+          type: integer
+          readOnly: true
         options:
           type: array
           items:
             $ref: '#/components/schemas/QuestionOption'
           readOnly: true
       required:
+      - course
       - course_id
       - created_at
       - created_by
       - default_points
+      - difficulty
       - id
+      - module
       - module_id
       - options
       - status
       - text
       - type
       - updated_at
+      - version
     QuestionList:
       type: object
       properties:
@@ -4571,9 +7630,21 @@ components:
           type: string
           format: uuid
           readOnly: true
+        course:
+          allOf:
+          - $ref: '#/components/schemas/QuestionCourseBrief'
+          readOnly: true
+        module:
+          allOf:
+          - $ref: '#/components/schemas/QuestionModuleBrief'
+          readOnly: true
         type:
           allOf:
           - $ref: '#/components/schemas/QuestionTypeEnum'
+          readOnly: true
+        difficulty:
+          allOf:
+          - $ref: '#/components/schemas/DifficultyEnum'
           readOnly: true
         text:
           type: string
@@ -4588,7 +7659,7 @@ components:
           readOnly: true
         status:
           allOf:
-          - $ref: '#/components/schemas/ActiveArchivedStatusEnum'
+          - $ref: '#/components/schemas/QuestionStatusEnum'
           readOnly: true
         created_by:
           allOf:
@@ -4602,17 +7673,46 @@ components:
           type: string
           format: date-time
           readOnly: true
+        version:
+          type: integer
+          readOnly: true
       required:
+      - course
       - course_id
       - created_at
       - created_by
       - default_points
+      - difficulty
       - id
+      - module
       - module_id
       - status
       - text
       - type
       - updated_at
+      - version
+    QuestionModuleBrief:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        position:
+          type: integer
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ActiveArchivedStatusEnum'
+          readOnly: true
+      required:
+      - id
+      - position
+      - status
+      - title
     QuestionOption:
       type: object
       properties:
@@ -4645,6 +7745,35 @@ components:
           default: false
       required:
       - text
+    QuestionStatistics:
+      type: object
+      properties:
+        total_questions:
+          type: integer
+        used_in_exams:
+          type: integer
+        used_in_exams_percentage:
+          type: number
+          format: double
+        types:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionTypeStatistics'
+      required:
+      - total_questions
+      - types
+      - used_in_exams
+      - used_in_exams_percentage
+    QuestionStatusEnum:
+      enum:
+      - ACTIVE
+      - ARCHIVED
+      - DELETED
+      type: string
+      description: |-
+        * `ACTIVE` - Active
+        * `ARCHIVED` - Archived
+        * `DELETED` - Deleted
     QuestionTypeEnum:
       enum:
       - SINGLE_CHOICE
@@ -4657,6 +7786,104 @@ components:
         * `MULTIPLE_CHOICE` - Multiple choice
         * `TRUE_FALSE` - True / False
         * `OPEN_ENDED` - Open ended
+    QuestionTypeStatistics:
+      type: object
+      properties:
+        type:
+          type: string
+        label:
+          type: string
+        count:
+          type: integer
+        percentage:
+          type: number
+          format: double
+      required:
+      - count
+      - label
+      - percentage
+      - type
+    QuestionsSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+        added_this_month:
+          type: integer
+      required:
+      - added_this_month
+      - total
+    RecentExam:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        course_id:
+          type: string
+          format: uuid
+        course_name:
+          type: string
+        created_by_id:
+          type: string
+          format: uuid
+        created_by_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+      required:
+      - course_id
+      - course_name
+      - created_at
+      - created_by_id
+      - created_by_name
+      - id
+      - status
+      - title
+    RecentResult:
+      type: object
+      properties:
+        attempt_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        student_name:
+          type: string
+        student_avatar_url:
+          oneOf:
+          - type: string
+            format: uri
+          - type: string
+            maxLength: 0
+        exam_title:
+          type: string
+        course_name:
+          type: string
+        submitted_at:
+          type: string
+          format: date-time
+        percentage:
+          type: number
+          format: double
+        passed:
+          type: boolean
+      required:
+      - attempt_id
+      - course_name
+      - exam_title
+      - passed
+      - percentage
+      - student_avatar_url
+      - student_id
+      - student_name
+      - submitted_at
     RefreshRequest:
       type: object
       properties:
@@ -4705,6 +7932,18 @@ components:
           allOf:
           - $ref: '#/components/schemas/UserBrief'
           readOnly: true
+        student_avatar_url:
+          type: string
+          format: uri
+          readOnly: true
+        audience_type:
+          type: string
+          readOnly: true
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResultGroup'
+          readOnly: true
         attempt_number:
           type: integer
           readOnly: true
@@ -4749,9 +7988,11 @@ components:
       required:
       - assignment_id
       - attempt_number
+      - audience_type
       - course
       - exam_id
       - exam_title
+      - groups
       - id
       - is_latest
       - passed
@@ -4760,17 +8001,85 @@ components:
       - started_at
       - status
       - student
+      - student_avatar_url
       - submitted_at
-    SetPasswordRequest:
+    ResultGroup:
       type: object
       properties:
-        password:
+        id:
           type: string
-          writeOnly: true
-          minLength: 1
-          maxLength: 128
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
       required:
-      - password
+      - id
+      - name
+    ResultReviewModeEnum:
+      enum:
+      - SCORE_ONLY
+      - AFTER_GRADING
+      - FULL_REVIEW
+      type: string
+      description: |-
+        * `SCORE_ONLY` - Score only
+        * `AFTER_GRADING` - After grading
+        * `FULL_REVIEW` - Full review
+    ResultSummary:
+      type: object
+      properties:
+        submissions:
+          type: integer
+        awaiting_review:
+          type: integer
+        graded:
+          type: integer
+        average_score:
+          type: number
+          format: double
+          nullable: true
+        grading_progress_percentage:
+          type: integer
+      required:
+      - average_score
+      - awaiting_review
+      - graded
+      - grading_progress_percentage
+      - submissions
+    ReviewPolicy:
+      type: object
+      properties:
+        mode:
+          $ref: '#/components/schemas/ResultReviewModeEnum'
+        released:
+          type: boolean
+        can_release:
+          type: boolean
+        blocked_reasons:
+          type: array
+          items:
+            type: string
+        submitted_count:
+          type: integer
+        graded_count:
+          type: integer
+        in_progress_count:
+          type: integer
+      required:
+      - blocked_reasons
+      - can_release
+      - graded_count
+      - in_progress_count
+      - mode
+      - released
+      - submitted_count
+    ReviewReleaseRequest:
+      type: object
+      properties:
+        version:
+          type: integer
+          minimum: 1
     StaffAnswer:
       type: object
       properties:
@@ -4794,8 +8103,8 @@ components:
           exclusiveMinimum: true
           readOnly: true
         question:
-          allOf:
-          - $ref: '#/components/schemas/QuestionDetail'
+          type: object
+          additionalProperties: {}
           readOnly: true
         selected_option_ids:
           type: array
@@ -4858,7 +8167,6 @@ components:
         * `CANCELLED` - Cancelled
     StudentAttempt:
       type: object
-      description: 'Faol (IN_PROGRESS) attempt: savollar + saqlangan javoblar + taymer.'
       properties:
         id:
           type: string
@@ -4893,6 +8201,9 @@ components:
         duration_minutes:
           type: integer
           readOnly: true
+        focus_violations:
+          type: integer
+          readOnly: true
         server_now:
           type: string
           readOnly: true
@@ -4908,10 +8219,46 @@ components:
       - duration_minutes
       - exam_id
       - exam_title
+      - focus_violations
       - id
       - questions
       - server_now
       - started_at
+      - status
+    StudentAttemptOption:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        text:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - text
+    StudentCourse:
+      type: object
+      properties:
+        enrollment_id:
+          type: string
+          format: uuid
+          readOnly: true
+        course_id:
+          type: string
+          format: uuid
+          readOnly: true
+        course_name:
+          type: string
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+      required:
+      - course_id
+      - course_name
+      - enrollment_id
       - status
     StudentDashboard:
       type: object
@@ -4934,9 +8281,103 @@ components:
       - completed_exams
       - my_courses
       - passed_exams
+    StudentDirectory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        username:
+          type: string
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/UserRoleEnum'
+          readOnly: true
+        avatar_url:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/UserStatusEnum'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        enrolled_courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentCourse'
+          readOnly: true
+        courses_count:
+          type: integer
+          readOnly: true
+        exams_taken:
+          type: integer
+          readOnly: true
+        average_score:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        passed_exams:
+          type: integer
+          readOnly: true
+      required:
+      - avatar_url
+      - average_score
+      - courses_count
+      - created_at
+      - email
+      - enrolled_courses
+      - exams_taken
+      - full_name
+      - id
+      - passed_exams
+      - role
+      - status
+      - updated_at
+      - username
+    StudentDirectorySummary:
+      type: object
+      properties:
+        total_students:
+          type: integer
+        active_students:
+          type: integer
+        inactive_students:
+          type: integer
+        course_enrollments:
+          type: integer
+        average_score:
+          type: number
+          format: double
+          nullable: true
+        passed_exams:
+          type: integer
+      required:
+      - active_students
+      - average_score
+      - course_enrollments
+      - inactive_students
+      - passed_exams
+      - total_students
     StudentExamQuestion:
       type: object
-      description: '`id` — ExamQuestion ID si (javob saqlash shu ID bilan).'
+      description: Persist qilingan attempt snapshot savoli; answer key chiqmaydi.
       properties:
         id:
           type: string
@@ -4966,7 +8407,7 @@ components:
         options:
           type: array
           items:
-            $ref: '#/components/schemas/StudentOption'
+            $ref: '#/components/schemas/StudentAttemptOption'
           readOnly: true
         answer:
           allOf:
@@ -4982,19 +8423,61 @@ components:
       - question_id
       - text
       - type
-    StudentOption:
+    StudentResultAnswer:
       type: object
       properties:
-        id:
+        exam_question_id:
           type: string
           format: uuid
           readOnly: true
-        text:
+        position:
+          type: integer
+          readOnly: true
+        max_points:
+          type: number
+          format: double
+          maximum: 10000
+          minimum: -10000
+          exclusiveMaximum: true
+          exclusiveMinimum: true
+          readOnly: true
+        question:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        selected_option_ids:
+          type: array
+          items: {}
+          readOnly: true
+        text_answer:
+          type: string
+          readOnly: true
+        is_correct:
+          type: boolean
+          readOnly: true
+          nullable: true
+        points_awarded:
+          type: number
+          format: double
+          maximum: 10000
+          minimum: -10000
+          exclusiveMaximum: true
+          exclusiveMinimum: true
+          readOnly: true
+          nullable: true
+        teacher_feedback:
           type: string
           readOnly: true
       required:
-      - id
-      - text
+      - exam_question_id
+      - is_correct
+      - max_points
+      - points_awarded
+      - position
+      - question
+      - selected_option_ids
+      - teacher_feedback
+      - text_answer
     StudentSavedAnswer:
       type: object
       properties:
@@ -5005,9 +8488,30 @@ components:
             format: uuid
         text_answer:
           type: string
+        revision:
+          type: integer
+          minimum: 0
       required:
       - option_ids
+      - revision
       - text_answer
+    TeacherCourse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        teacher_type:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - name
+      - teacher_type
     TeacherDashboard:
       type: object
       properties:
@@ -5038,7 +8542,7 @@ components:
       - my_questions
       - my_students
       - pending_grading
-    User:
+    TeacherDirectory:
       type: object
       properties:
         id:
@@ -5052,13 +8556,15 @@ components:
           type: string
           format: email
           readOnly: true
+        username:
+          type: string
+          readOnly: true
         role:
           allOf:
           - $ref: '#/components/schemas/UserRoleEnum'
           readOnly: true
         avatar_url:
           type: string
-          format: uri
           readOnly: true
         status:
           allOf:
@@ -5072,15 +8578,97 @@ components:
           type: string
           format: date-time
           readOnly: true
+        assigned_courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherCourse'
+          readOnly: true
+        courses_count:
+          type: integer
+          readOnly: true
+        students_count:
+          type: integer
+          readOnly: true
+        exams_count:
+          type: integer
+          readOnly: true
       required:
+      - assigned_courses
       - avatar_url
+      - courses_count
       - created_at
       - email
+      - exams_count
       - full_name
       - id
       - role
       - status
+      - students_count
       - updated_at
+      - username
+    TeacherDirectorySummary:
+      type: object
+      properties:
+        active_teachers:
+          type: integer
+        inactive_teachers:
+          type: integer
+        total_teachers:
+          type: integer
+        students_taught:
+          type: integer
+        course_assignments:
+          type: integer
+      required:
+      - active_teachers
+      - course_assignments
+      - inactive_teachers
+      - students_taught
+      - total_teachers
+    TeachingCoursesUpdateRequest:
+      type: object
+      properties:
+        course_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        main_course_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        version:
+          type: integer
+          minimum: 1
+      required:
+      - course_ids
+      - version
+    TransitionActionEnum:
+      enum:
+      - PUBLISH
+      - PAUSE
+      - RESUME
+      - COMPLETE
+      - CANCEL
+      - RESTORE_DRAFT
+      - ARCHIVE
+      type: string
+      description: |-
+        * `PUBLISH` - Publish
+        * `PAUSE` - Pause
+        * `RESUME` - Resume
+        * `COMPLETE` - Complete
+        * `CANCEL` - Cancel
+        * `RESTORE_DRAFT` - Restore draft
+        * `ARCHIVE` - Archive
+    UpcomingAssignmentsSummary:
+      type: object
+      properties:
+        next_7_days:
+          type: integer
+      required:
+      - next_7_days
     UserBrief:
       type: object
       properties:
@@ -5104,55 +8692,28 @@ components:
       - full_name
       - id
       - role
-    UserCreateRequest:
-      type: object
-      properties:
-        full_name:
-          type: string
-          minLength: 1
-          maxLength: 255
-        email:
-          type: string
-          format: email
-          minLength: 1
-          maxLength: 254
-        password:
-          type: string
-          writeOnly: true
-          minLength: 1
-          maxLength: 128
-        role:
-          $ref: '#/components/schemas/CreatableUserRoleEnum'
-        avatar_url:
-          oneOf:
-          - type: string
-            format: uri
-            maxLength: 500
-          - type: string
-            maxLength: 0
-      required:
-      - email
-      - full_name
-      - password
-      - role
     UserRoleEnum:
       enum:
       - SUPER_ADMIN
       - TEACHER
+      - SUPPORT_TEACHER
       - STUDENT
       type: string
       description: |-
         * `SUPER_ADMIN` - Super Admin
         * `TEACHER` - Teacher
+        * `SUPPORT_TEACHER` - Support Teacher
         * `STUDENT` - Student
     UserStatusEnum:
       enum:
       - ACTIVE
       - INACTIVE
+      - DELETED
       type: string
       description: |-
         * `ACTIVE` - Active
         * `INACTIVE` - Inactive
+        * `DELETED` - Deleted
   securitySchemes:
     jwtAuth:
       type: http
