@@ -166,12 +166,18 @@ curl -s -X PATCH $B/admin/accounts/$ID -H "$AH" -H 'Content-Type: application/js
   -d "{\"full_name\":\"Madina K.\",\"email\":\"madina.new@example.com\",\"location\":\"Samarkand\",\"version\":$VERSION}"
 curl -s -X PUT $B/admin/accounts/$ID -H "$AH" \
   -F "avatar=@avatar.png" -F "version=2"
+curl -s -X DELETE "$B/admin/accounts/$ID/photo?version=3" -H "$AH"
 curl -s -X PUT $B/admin/accounts/$ID/status -H "$AH" -H 'Content-Type: application/json' \
-  -d '{"status":"INACTIVE","version":3}'
+  -d '{"status":"INACTIVE","version":4}'
 curl -s -X POST $B/admin/accounts/$ID/temporary-password -H "$AH"
 curl -s $B/admin/accounts/$ID/courses -H "$AH"
 curl -s $B/admin/accounts/$ID/activity -H "$AH"
 ```
+
+Student account uchun `/admin/accounts/$ID/courses` har bir kursda `teacher_name` va
+`progress` qaytaradi. Progress formulasi/modeli hali belgilanmagani uchun `progress: null`.
+`teacher_name` MAIN teacher’dan, u bo‘lmasa birinchi SUPPORT teacher’dan olinadi; kursga umuman
+teacher biriktirilmagan bo‘lsa `null`.
 
 Teacher sahifasi faqat admin accounts API orqali:
 
@@ -251,7 +257,7 @@ endpointlari backward compatibility uchun saqlangan.
 ## 5. Avtomatik testlar
 
 ```bash
-make test        # PostgreSQL: 546 passed
+make test        # PostgreSQL: 555 passed
 make lint
 make schema      # OpenAPI validatsiyasi
 ```

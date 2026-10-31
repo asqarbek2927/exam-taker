@@ -306,16 +306,29 @@ class AdminAccountDetailSerializer(AdminAccountSerializer):
                 .order_by("course__name")
             ]
         if obj.role == UserRole.STUDENT:
+            from django.db.models import OuterRef, Subquery
+
+            course_teacher_name = (
+                CourseTeacher.objects.filter(
+                    course_id=OuterRef("course_id"),
+                )
+                .order_by("type", "assigned_at")
+                .values("teacher__full_name")[:1]
+            )
             return [
                 {
                     "id": item.course_id,
                     "name": item.course.name,
                     "status": item.status,
                     "enrolled_at": item.enrolled_at,
+                    "teacher_name": item.teacher_name,
+                    # Kurs progressi uchun tasdiqlangan formula/model hali mavjud emas.
+                    "progress": None,
                     "groups_count": item.course.groups.count(),
                     "students_count": item.course.enrollments.filter(status="ACTIVE").count(),
                 }
                 for item in Enrollment.objects.filter(student=obj)
+                .annotate(teacher_name=Subquery(course_teacher_name))
                 .select_related("course")
                 .order_by("course__name")
             ]
@@ -492,6 +505,8 @@ class AccountCourseSerializer(serializers.Serializer):
     status = serializers.CharField()
     teacher_type = serializers.CharField(required=False)
     enrolled_at = serializers.DateTimeField(required=False)
+    teacher_name = serializers.CharField(required=False, allow_null=True)
+    progress = serializers.FloatField(required=False, allow_null=True, min_value=0, max_value=100)
     groups_count = serializers.IntegerField()
     students_count = serializers.IntegerField()
 

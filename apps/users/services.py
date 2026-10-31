@@ -214,6 +214,38 @@ def update_admin_account(*, user: User, actor, expected_version: int, **fields) 
 
 
 @transaction.atomic
+def delete_admin_account_avatar(*, user: User, actor, expected_version: int) -> User:
+    """Super-admin boshqaradigan account rasmini storage bilan birga o'chiradi."""
+    from apps.audit.choices import AuditAction
+
+    user = User.objects.select_for_update().get(pk=user.pk)
+    if user.version != expected_version:
+        raise ConflictError(f"VERSION_CONFLICT: joriy version {user.version}.")
+    if user.status == UserStatus.DELETED:
+        raise ConflictError("DELETED account tahrirlanmaydi.")
+    managed_roles = {UserRole.TEACHER, UserRole.SUPPORT_TEACHER, UserRole.STUDENT}
+    if user.role not in managed_roles:
+        raise BusinessRuleError("Faqat student, teacher yoki support teacher rasmi o'chiriladi.")
+    old_avatar_name = user.avatar.name
+    avatar_storage = user.avatar.storage
+    if not old_avatar_name and not user.avatar_url:
+        return user
+    user.avatar = ""
+    user.avatar_url = ""
+    user.version += 1
+    user.save(update_fields=["avatar", "avatar_url", "version", "updated_at"])
+    if old_avatar_name:
+        transaction.on_commit(lambda: _delete_stored_file(avatar_storage, old_avatar_name))
+    _record_account_audit(
+        actor=actor,
+        action=AuditAction.ACCOUNT_UPDATED,
+        user=user,
+        metadata={"changed_fields": ["avatar"], "version": user.version},
+    )
+    return user
+
+
+@transaction.atomic
 def set_admin_account_status(*, user: User, actor, new_status: str, expected_version: int) -> User:
     from apps.audit.choices import AuditAction
 

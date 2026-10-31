@@ -96,10 +96,11 @@ Bu endpointlarning hammasi faqat `SUPER_ADMIN` uchun.
 | POST | `/admin/accounts` | Server-generated temporary credential bilan account yaratish |
 | GET | `/admin/accounts/{id}` | Courses, groups, exam stats va last activity bilan detail |
 | PUT/PATCH | `/admin/accounts/{id}` | Name/email/avatar/phone/locationni optimistic version bilan tahrirlash |
+| DELETE | `/admin/accounts/{id}/photo` | Student/teacher/support teacher avatarini storage bilan birga o‘chirish |
 | PUT | `/admin/accounts/{id}/status` | `ACTIVE/INACTIVE`, session revoke bilan |
 | DELETE | `/admin/accounts/{id}` | Soft delete; tarixiy attempt/result saqlanadi |
 | POST | `/admin/accounts/{id}/temporary-password` | Yangi bir martalik temporary password |
-| GET | `/admin/accounts/{id}/courses` | Role-specific enrolled/teaching courses |
+| GET | `/admin/accounts/{id}/courses` | Student uchun course, ustuvor MAIN/SUPPORT `teacher_name` va nullable `progress`; teacher uchun teaching courses |
 | PUT | `/admin/accounts/{id}/teaching-courses` | Teacher course assignmentlarini transactionally almashtirish |
 | GET | `/admin/accounts/{id}/activity` | Real paged account audit log |
 | GET | `/teachers...` | Legacy; yangi Super-admin Teacher sahifasi foydalanmaydi |

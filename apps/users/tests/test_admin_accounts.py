@@ -23,6 +23,7 @@ from apps.users.choices import UserStatus
 from apps.users.models import User
 from apps.users.tests.factories import (
     DEFAULT_PASSWORD,
+    AdminFactory,
     StudentFactory,
     SupportTeacherFactory,
     TeacherFactory,
@@ -247,23 +248,77 @@ def test_patch_is_versioned_and_updates_email(auth_client, admin, teacher):
     assert conflict.status_code == 409
 
 
-def test_put_updates_admin_account_avatar(auth_client, admin, teacher, settings, tmp_path):
+@pytest.mark.parametrize("target_factory", [TeacherFactory, SupportTeacherFactory, StudentFactory])
+def test_put_updates_admin_account_avatar(auth_client, admin, target_factory, settings, tmp_path):
     settings.MEDIA_ROOT = tmp_path
+    target = target_factory()
     image = BytesIO()
     Image.new("RGB", (2, 2), color="blue").save(image, format="PNG")
     avatar = SimpleUploadedFile("teacher.png", image.getvalue(), content_type="image/png")
 
     response = auth_client(admin).put(
-        f"{ACCOUNTS}/{teacher.id}",
-        {"avatar": avatar, "version": teacher.version},
+        f"{ACCOUNTS}/{target.id}",
+        {"avatar": avatar, "version": target.version},
         format="multipart",
     )
 
     assert response.status_code == 200
     assert "/media/avatars/" in response.json()["avatar_url"]
     assert response.json()["version"] == 2
-    teacher.refresh_from_db()
-    assert teacher.avatar.name.endswith(".png")
+    target.refresh_from_db()
+    assert target.avatar.name.endswith(".png")
+
+
+@pytest.mark.parametrize("target_factory", [TeacherFactory, SupportTeacherFactory, StudentFactory])
+def test_admin_deletes_managed_account_avatar(
+    auth_client,
+    admin,
+    target_factory,
+    settings,
+    tmp_path,
+    django_capture_on_commit_callbacks,
+):
+    settings.MEDIA_ROOT = tmp_path
+    image = BytesIO()
+    Image.new("RGB", (2, 2), color="red").save(image, format="PNG")
+    target = target_factory(
+        avatar=SimpleUploadedFile("avatar.png", image.getvalue(), content_type="image/png")
+    )
+    stored_path = tmp_path / target.avatar.name
+    assert stored_path.exists()
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = auth_client(admin).delete(
+            f"{ACCOUNTS}/{target.id}/photo?version={target.version}",
+        )
+
+    assert response.status_code == 200
+    assert response.json()["avatar_url"] == ""
+    assert response.json()["version"] == 2
+    target.refresh_from_db()
+    assert not target.avatar
+    assert not stored_path.exists()
+    assert AuditLog.objects.filter(
+        entity_id=target.pk,
+        action=AuditAction.ACCOUNT_UPDATED,
+        metadata__changed_fields=["avatar"],
+    ).exists()
+
+
+def test_admin_cannot_delete_another_super_admin_avatar(auth_client, admin):
+    target = AdminFactory()
+    response = auth_client(admin).delete(
+        f"{ACCOUNTS}/{target.id}/photo?version={target.version}",
+    )
+    assert response.status_code == 400
+
+
+def test_non_admin_cannot_delete_account_avatar(auth_client, teacher):
+    target = StudentFactory()
+    response = auth_client(teacher).delete(
+        f"{ACCOUNTS}/{target.id}/photo?version={target.version}",
+    )
+    assert response.status_code == 403
 
 
 def test_patch_rejects_duplicate_email(auth_client, admin, teacher):
@@ -362,12 +417,41 @@ def test_temporary_password_is_one_time_response_and_revokes_old_session(
 def test_courses_endpoint_supports_student_and_teacher(auth_client, admin):
     teacher_assignment = CourseTeacherFactory()
     enrollment = EnrollmentFactory()
+    student_teacher = TeacherFactory(full_name="Aziz Rahimov")
+    CourseTeacherFactory(course=enrollment.course, teacher=student_teacher)
     client = auth_client(admin)
 
     teacher_courses = client.get(f"{ACCOUNTS}/{teacher_assignment.teacher_id}/courses").json()
     student_courses = client.get(f"{ACCOUNTS}/{enrollment.student_id}/courses").json()
     assert teacher_courses[0]["teacher_type"] == "MAIN"
     assert student_courses[0]["status"] == "ACTIVE"
+    assert student_courses[0]["teacher_name"] == "Aziz Rahimov"
+    assert student_courses[0]["progress"] is None
+
+
+def test_student_course_teacher_name_is_null_without_teacher(auth_client, admin):
+    enrollment = EnrollmentFactory()
+
+    response = auth_client(admin).get(f"{ACCOUNTS}/{enrollment.student_id}/courses")
+
+    assert response.status_code == 200
+    assert response.json()[0]["teacher_name"] is None
+    assert response.json()[0]["progress"] is None
+
+
+def test_student_course_uses_support_teacher_when_main_is_missing(auth_client, admin):
+    enrollment = EnrollmentFactory()
+    support = SupportTeacherFactory(full_name="Support Teacher")
+    CourseTeacherFactory(
+        course=enrollment.course,
+        teacher=support,
+        type=CourseTeacherType.SUPPORT,
+    )
+
+    response = auth_client(admin).get(f"{ACCOUNTS}/{enrollment.student_id}/courses")
+
+    assert response.status_code == 200
+    assert response.json()[0]["teacher_name"] == "Support Teacher"
 
 
 def test_replace_teaching_courses_and_support_teacher_rule(auth_client, admin):

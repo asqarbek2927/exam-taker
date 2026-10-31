@@ -1,4 +1,9 @@
-from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
+)
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -306,6 +311,32 @@ class AdminAccountViewSet(
 
     def partial_update(self, request, *args, **kwargs):
         return self._update_account(request, partial=True)
+
+    @extend_schema(
+        tags=["admin-accounts"],
+        parameters=[
+            OpenApiParameter(
+                name="version",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="Accountning joriy optimistic-lock versiyasi.",
+            )
+        ],
+        request=None,
+        responses={200: AdminAccountDetailSerializer},
+    )
+    @action(detail=True, methods=["delete"], url_path="photo")
+    def photo(self, request, pk=None):
+        version_data = request.data if request.data.get("version") else request.query_params
+        serializer = AccountVersionSerializer(data=version_data)
+        serializer.is_valid(raise_exception=True)
+        user = services.delete_admin_account_avatar(
+            user=self.get_object(),
+            actor=request.user,
+            expected_version=serializer.validated_data["version"],
+        )
+        return Response(AdminAccountDetailSerializer(user, context={"request": request}).data)
 
     def destroy(self, request, *args, **kwargs):
         serializer = AccountVersionSerializer(data=request.data)
