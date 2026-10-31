@@ -28,6 +28,24 @@ def test_teachers_and_students_endpoints_are_role_scoped(auth_client, admin):
     assert client.get(f"/api/v1/students/{t.id}").status_code == 404
 
 
+def test_deleted_accounts_are_hidden_from_legacy_lists_details_and_summaries(auth_client, admin):
+    deleted_teacher = TeacherFactory(status=UserStatus.DELETED)
+    deleted_student = StudentFactory(status=UserStatus.DELETED)
+    client = auth_client(admin)
+
+    teachers = client.get("/api/v1/teachers")
+    students = client.get("/api/v1/students")
+
+    assert teachers.status_code == 200
+    assert students.status_code == 200
+    assert all(item["id"] != str(deleted_teacher.id) for item in teachers.json()["data"])
+    assert all(item["id"] != str(deleted_student.id) for item in students.json()["data"])
+    assert client.get(f"/api/v1/teachers/{deleted_teacher.id}").status_code == 404
+    assert client.get(f"/api/v1/students/{deleted_student.id}").status_code == 404
+    assert client.get("/api/v1/teachers/summary").json()["total_teachers"] == 0
+    assert client.get("/api/v1/students/summary").json()["total_students"] == 0
+
+
 def test_teachers_endpoint_forbidden_for_non_admin(auth_client, teacher):
     assert auth_client(teacher).get("/api/v1/teachers").status_code == 403
 

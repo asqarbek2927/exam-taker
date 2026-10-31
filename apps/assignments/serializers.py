@@ -5,7 +5,7 @@ from apps.academics.choices import GroupStatus
 from apps.academics.models import StudyGroup
 from apps.exams.models import Exam
 from apps.exams.serializers import CourseBriefSerializer
-from apps.users.choices import UserRole
+from apps.users.choices import UserRole, UserStatus
 from apps.users.models import User
 from apps.users.serializers import UserBriefSerializer
 from common.fields import UUIDRelatedField
@@ -234,7 +234,10 @@ class AssignmentCreateSerializer(_AudienceMixin, serializers.Serializer):
         required=False,
     )
     student_ids = UUIDRelatedField(
-        queryset=User.objects.filter(role=UserRole.STUDENT),
+        queryset=User.objects.filter(
+            role=UserRole.STUDENT,
+            status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
+        ),
         many=True,
         source="students",
         required=False,
@@ -291,7 +294,10 @@ class AssignmentUpdateSerializer(_AudienceMixin, serializers.Serializer):
         required=False,
     )
     student_ids = UUIDRelatedField(
-        queryset=User.objects.filter(role=UserRole.STUDENT),
+        queryset=User.objects.filter(
+            role=UserRole.STUDENT,
+            status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
+        ),
         many=True,
         source="students",
         required=False,

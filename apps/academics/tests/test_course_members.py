@@ -178,6 +178,17 @@ def test_student_cannot_list_course_teachers(auth_client, student):
     assert auth_client(student).get(teachers_url(course)).status_code == 403
 
 
+def test_deleted_teacher_is_hidden_from_course_teacher_list(auth_client, admin):
+    assignment = CourseTeacherFactory()
+    assignment.teacher.status = UserStatus.DELETED
+    assignment.teacher.save(update_fields=["status", "updated_at"])
+
+    response = auth_client(admin).get(teachers_url(assignment.course))
+
+    assert response.status_code == 200
+    assert response.json()["pagination"]["total"] == 0
+
+
 # ======================= students (enrollments) =======================
 def test_admin_enrolls_student(auth_client, admin, student):
     course = CourseFactory()
@@ -188,6 +199,17 @@ def test_admin_enrolls_student(auth_client, admin, student):
     body = response.json()
     assert body["status"] == "ACTIVE"
     assert body["student"]["id"] == str(student.id)
+
+
+def test_deleted_student_is_hidden_from_course_student_list(auth_client, admin):
+    enrollment = EnrollmentFactory()
+    enrollment.student.status = UserStatus.DELETED
+    enrollment.student.save(update_fields=["status", "updated_at"])
+
+    response = auth_client(admin).get(students_url(enrollment.course))
+
+    assert response.status_code == 200
+    assert response.json()["pagination"]["total"] == 0
 
 
 def test_enroll_duplicate_returns_409(auth_client, admin):

@@ -20,7 +20,7 @@ from common.permissions import IsSuperAdmin
 from common.throttling import LoginIPRateThrottle, LoginRateThrottle
 
 from . import selectors, services
-from .choices import UserRole
+from .choices import UserRole, UserStatus
 from .filters import PersonFilter, StudentDirectoryFilter, TeacherDirectoryFilter, UserFilter
 from .models import User
 from .serializers import (
@@ -445,7 +445,7 @@ class _RoleScopedReadOnlyViewSet(
     lookup_value_regex = UUID_REGEX
 
     def get_queryset(self):
-        return User.objects.filter(role=self.role)
+        return User.objects.filter(role=self.role).exclude(status=UserStatus.DELETED)
 
 
 @extend_schema_view(

@@ -312,6 +312,7 @@ class AdminAccountDetailSerializer(AdminAccountSerializer):
                 CourseTeacher.objects.filter(
                     course_id=OuterRef("course_id"),
                 )
+                .exclude(teacher__status=UserStatus.DELETED)
                 .order_by("type", "assigned_at")
                 .values("teacher__full_name")[:1]
             )

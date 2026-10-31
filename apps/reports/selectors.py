@@ -199,9 +199,23 @@ def dashboard_summary(now: datetime) -> dict:
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     users = User.objects.aggregate(
         total_students=Count("pk", filter=Q(role=UserRole.STUDENT, status=UserStatus.ACTIVE)),
-        new_students=Count("pk", filter=Q(role=UserRole.STUDENT, created_at__gte=month_start)),
+        new_students=Count(
+            "pk",
+            filter=Q(
+                role=UserRole.STUDENT,
+                status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
+                created_at__gte=month_start,
+            ),
+        ),
         total_teachers=Count("pk", filter=Q(role__in=EDUCATOR_ROLES, status=UserStatus.ACTIVE)),
-        new_teachers=Count("pk", filter=Q(role__in=EDUCATOR_ROLES, created_at__gte=month_start)),
+        new_teachers=Count(
+            "pk",
+            filter=Q(
+                role__in=EDUCATOR_ROLES,
+                status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
+                created_at__gte=month_start,
+            ),
+        ),
     )
     courses = Course.objects.aggregate(
         total=Count("pk"), active=Count("pk", filter=Q(status=CourseStatus.ACTIVE))
@@ -383,7 +397,10 @@ def exam_statistics() -> dict:
 
 def platform_activity(limit: int = 10) -> list[dict]:
     events = []
-    for user in User.objects.filter(role__in=EDUCATOR_ROLES).order_by("-created_at")[:limit]:
+    for user in User.objects.filter(
+        role__in=EDUCATOR_ROLES,
+        status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
+    ).order_by("-created_at")[:limit]:
         events.append(
             {
                 "type": "TEACHER_JOINED",

@@ -9,6 +9,7 @@ from apps.academics.tests.factories import (
     GroupStudentFactory,
     StudyGroupFactory,
 )
+from apps.users.choices import UserStatus
 from apps.users.tests.factories import StudentFactory, TeacherFactory
 
 pytestmark = pytest.mark.django_db
@@ -44,6 +45,15 @@ def test_admin_creates_updates_and_deletes_group(auth_client, admin):
 
     assert client.delete(groups_url(course, group)).status_code == 204
     assert not StudyGroup.objects.filter(pk=group.pk).exists()
+
+
+def test_group_detail_does_not_expose_deleted_teacher(auth_client, admin):
+    group = StudyGroupFactory(support_teacher=TeacherFactory(status=UserStatus.DELETED))
+
+    response = auth_client(admin).get(groups_url(group.course, group))
+
+    assert response.status_code == 200
+    assert response.json()["support_teacher"] is None
 
 
 def test_group_name_must_be_unique_within_course(auth_client, admin):

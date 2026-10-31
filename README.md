@@ -227,7 +227,7 @@ DATABASE_URL=postgres://<user>:<password>@localhost:5432/<database> \
   DJANGO_SETTINGS_MODULE=config.settings.test pytest --create-db
 ```
 
-560 ta test: auth, users, permission matritsasi, queryset scoping,
+565 ta test: auth, users, permission matritsasi, queryset scoping,
 academics, savol validatsiyasi, imtihon CRUD, edit-lock, assignment (status/transition/audience/eligibility),
 attempt (start/autosave/submit/grading/expiry/leakage), DB constraintlar, race condition, OpenAPI.
 

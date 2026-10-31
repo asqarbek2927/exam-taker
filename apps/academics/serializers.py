@@ -1,7 +1,7 @@
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from apps.users.choices import EDUCATOR_ROLES, UserRole
+from apps.users.choices import EDUCATOR_ROLES, UserRole, UserStatus
 from apps.users.models import User
 from apps.users.serializers import UserBriefSerializer
 from common.fields import UUIDRelatedField
@@ -30,13 +30,13 @@ class CourseMutationSerializer(serializers.Serializer):
         choices=[CourseStatus.DRAFT, CourseStatus.ACTIVE], required=False
     )
     main_teacher_id = UUIDRelatedField(
-        queryset=User.objects.filter(role=UserRole.TEACHER),
+        queryset=User.objects.filter(role=UserRole.TEACHER).exclude(status=UserStatus.DELETED),
         source="main_teacher",
         required=False,
         allow_null=True,
     )
     teacher_ids = UUIDRelatedField(
-        queryset=User.objects.filter(role__in=EDUCATOR_ROLES),
+        queryset=User.objects.filter(role__in=EDUCATOR_ROLES).exclude(status=UserStatus.DELETED),
         source="teachers",
         many=True,
         required=False,
@@ -58,7 +58,9 @@ class CourseMutationSerializer(serializers.Serializer):
             teacher_ids = {teacher.pk for teacher in teachers}
             teacher_ids.add(main.pk)
             attrs["teachers"] = list(
-                User.objects.filter(pk__in=teacher_ids).order_by("full_name", "pk")
+                User.objects.filter(pk__in=teacher_ids)
+                .exclude(status=UserStatus.DELETED)
+                .order_by("full_name", "pk")
             )
         return attrs
 
@@ -171,7 +173,8 @@ class CourseTeacherSerializer(serializers.ModelSerializer):
 
 class CourseTeacherCreateSerializer(serializers.Serializer):
     teacher_id = UUIDRelatedField(
-        queryset=User.objects.filter(role__in=EDUCATOR_ROLES), source="teacher"
+        queryset=User.objects.filter(role__in=EDUCATOR_ROLES).exclude(status=UserStatus.DELETED),
+        source="teacher",
     )
     type = serializers.ChoiceField(choices=CourseTeacherType.choices)
 
@@ -259,7 +262,8 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 
 class EnrollmentCreateSerializer(serializers.Serializer):
     student_id = UUIDRelatedField(
-        queryset=User.objects.filter(role=UserRole.STUDENT), source="student"
+        queryset=User.objects.filter(role=UserRole.STUDENT).exclude(status=UserStatus.DELETED),
+        source="student",
     )
 
     def to_internal_value(self, data):
@@ -366,13 +370,13 @@ class ModuleWithQuestionsSerializer(ModuleSerializer):
 class GroupWriteSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255)
     main_teacher_id = UUIDRelatedField(
-        queryset=User.objects.filter(role=UserRole.TEACHER),
+        queryset=User.objects.filter(role=UserRole.TEACHER).exclude(status=UserStatus.DELETED),
         source="main_teacher",
         required=False,
         allow_null=True,
     )
     support_teacher_id = UUIDRelatedField(
-        queryset=User.objects.filter(role__in=EDUCATOR_ROLES),
+        queryset=User.objects.filter(role__in=EDUCATOR_ROLES).exclude(status=UserStatus.DELETED),
         source="support_teacher",
         required=False,
         allow_null=True,
@@ -418,8 +422,8 @@ class GroupCourseSerializer(serializers.Serializer):
 class GroupSerializer(serializers.ModelSerializer):
     students_count = serializers.IntegerField(read_only=True)
     course = GroupCourseSerializer(read_only=True)
-    main_teacher = UserBriefSerializer(read_only=True)
-    support_teacher = UserBriefSerializer(read_only=True)
+    main_teacher = serializers.SerializerMethodField()
+    support_teacher = serializers.SerializerMethodField()
     students_preview = serializers.SerializerMethodField()
 
     class Meta:
@@ -438,6 +442,18 @@ class GroupSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+    @extend_schema_field(UserBriefSerializer(allow_null=True))
+    def get_main_teacher(self, obj: StudyGroup):
+        if obj.main_teacher is None or obj.main_teacher.status == UserStatus.DELETED:
+            return None
+        return UserBriefSerializer(obj.main_teacher).data
+
+    @extend_schema_field(UserBriefSerializer(allow_null=True))
+    def get_support_teacher(self, obj: StudyGroup):
+        if obj.support_teacher is None or obj.support_teacher.status == UserStatus.DELETED:
+            return None
+        return UserBriefSerializer(obj.support_teacher).data
 
     @extend_schema_field(UserBriefSerializer(many=True))
     def get_students_preview(self, obj: StudyGroup):
@@ -476,7 +492,8 @@ class GroupStudentSerializer(serializers.ModelSerializer):
 
 class GroupStudentCreateSerializer(serializers.Serializer):
     student_id = UUIDRelatedField(
-        queryset=User.objects.filter(role=UserRole.STUDENT), source="student"
+        queryset=User.objects.filter(role=UserRole.STUDENT).exclude(status=UserStatus.DELETED),
+        source="student",
     )
 
     def to_internal_value(self, data):

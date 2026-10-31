@@ -64,8 +64,17 @@ def with_course_stats(qs: QuerySet[Course]) -> QuerySet[Course]:
     from apps.questions.models import Question
 
     return qs.annotate(
-        teachers_count=_count_for(CourseTeacher, "course"),
-        students_count=_count_for(Enrollment, "course", status=EnrollmentStatus.ACTIVE),
+        teachers_count=_count_for(
+            CourseTeacher,
+            "course",
+            teacher__status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
+        ),
+        students_count=_count_for(
+            Enrollment,
+            "course",
+            status=EnrollmentStatus.ACTIVE,
+            student__status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
+        ),
         groups_count=_count_for(StudyGroup, "course"),
         modules_count=_count_for(Module, "course", status=ModuleStatus.ACTIVE),
         questions_count=_count_for(Question, "course", status=QuestionStatus.ACTIVE),
@@ -73,9 +82,11 @@ def with_course_stats(qs: QuerySet[Course]) -> QuerySet[Course]:
     ).prefetch_related(
         Prefetch(
             "course_teachers",
-            queryset=CourseTeacher.objects.select_related("teacher").order_by(
-                "type", "assigned_at"
-            ),
+            queryset=CourseTeacher.objects.filter(
+                teacher__status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE]
+            )
+            .select_related("teacher")
+            .order_by("type", "assigned_at"),
         )
     )
 
@@ -110,11 +121,17 @@ def course_catalog_summary() -> dict:
 
 
 def course_teachers(course: Course) -> QuerySet[CourseTeacher]:
-    return CourseTeacher.objects.filter(course=course).select_related("teacher")
+    return CourseTeacher.objects.filter(
+        course=course,
+        teacher__status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
+    ).select_related("teacher")
 
 
 def course_enrollments(course: Course) -> QuerySet[Enrollment]:
-    return Enrollment.objects.filter(course=course).select_related("student")
+    return Enrollment.objects.filter(
+        course=course,
+        student__status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
+    ).select_related("student")
 
 
 # --------------------------------------------------------------------------
@@ -150,11 +167,25 @@ def course_groups(course: Course) -> QuerySet[StudyGroup]:
     return (
         StudyGroup.objects.filter(course=course)
         .select_related("course", "main_teacher", "support_teacher")
-        .annotate(students_count=Count("group_students"))
+        .annotate(
+            students_count=Count(
+                "group_students",
+                filter=Q(
+                    group_students__student__status__in=[
+                        UserStatus.ACTIVE,
+                        UserStatus.INACTIVE,
+                    ]
+                ),
+            )
+        )
         .prefetch_related(
             Prefetch(
                 "group_students",
-                queryset=GroupStudent.objects.select_related("student").order_by("added_at"),
+                queryset=GroupStudent.objects.filter(
+                    student__status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE]
+                )
+                .select_related("student")
+                .order_by("added_at"),
                 to_attr="student_memberships",
             )
         )
@@ -164,11 +195,25 @@ def course_groups(course: Course) -> QuerySet[StudyGroup]:
 def group_directory() -> QuerySet[StudyGroup]:
     return (
         StudyGroup.objects.select_related("course", "main_teacher", "support_teacher")
-        .annotate(students_count=Count("group_students"))
+        .annotate(
+            students_count=Count(
+                "group_students",
+                filter=Q(
+                    group_students__student__status__in=[
+                        UserStatus.ACTIVE,
+                        UserStatus.INACTIVE,
+                    ]
+                ),
+            )
+        )
         .prefetch_related(
             Prefetch(
                 "group_students",
-                queryset=GroupStudent.objects.select_related("student").order_by("added_at"),
+                queryset=GroupStudent.objects.filter(
+                    student__status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE]
+                )
+                .select_related("student")
+                .order_by("added_at"),
                 to_attr="student_memberships",
             )
         )
@@ -215,6 +260,7 @@ def group_directory_summary() -> dict:
         GroupStudent.objects.filter(
             group__status=GroupStatus.ACTIVE,
             group__course__status__in=[CourseStatus.DRAFT, CourseStatus.ACTIVE],
+            student__status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
         )
         .values("student_id")
         .distinct()
@@ -224,7 +270,10 @@ def group_directory_summary() -> dict:
 
 
 def group_students(group: StudyGroup) -> QuerySet[GroupStudent]:
-    return GroupStudent.objects.filter(group=group).select_related("student")
+    return GroupStudent.objects.filter(
+        group=group,
+        student__status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
+    ).select_related("student")
 
 
 def eligible_group_students(group: StudyGroup) -> QuerySet[User]:
@@ -239,7 +288,7 @@ def eligible_group_students(group: StudyGroup) -> QuerySet[User]:
         group__status=GroupStatus.ACTIVE,
     ).values("student_id")
     return (
-        User.objects.filter(pk__in=enrolled_ids)
+        User.objects.filter(pk__in=enrolled_ids, status=UserStatus.ACTIVE)
         .exclude(pk__in=grouped_ids)
         .order_by("full_name", "email")
     )

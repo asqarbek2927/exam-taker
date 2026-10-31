@@ -461,6 +461,26 @@ def test_soft_delete_preserves_history_and_blocks_login(api_client, auth_client,
     )
 
 
+def test_soft_deleted_teacher_is_hidden_from_account_list_and_role_summary(
+    auth_client, admin, teacher
+):
+    client = auth_client(admin)
+
+    deleted = client.delete(f"{ACCOUNTS}/{teacher.id}", {"version": teacher.version}, format="json")
+    accounts = client.get(ACCOUNTS, {"role": "TEACHER"})
+    summary = client.get(f"{ACCOUNTS}/summary", {"role": "TEACHER"})
+
+    assert deleted.status_code == 204
+    assert accounts.status_code == 200
+    assert all(item["id"] != str(teacher.id) for item in accounts.json()["data"])
+    assert client.get(f"{ACCOUNTS}/{teacher.id}").status_code == 404
+    assert client.get(f"{ACCOUNTS}/{teacher.id}/courses").status_code == 404
+    assert summary.status_code == 200
+    assert summary.json()["total_accounts"] == 0
+    assert summary.json()["active_accounts"] == 0
+    assert summary.json()["inactive_accounts"] == 0
+
+
 def test_soft_delete_rejects_active_group_main_teacher(auth_client, admin, teacher):
     StudyGroupFactory(main_teacher=teacher)
     response = auth_client(admin).delete(

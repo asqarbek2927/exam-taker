@@ -27,13 +27,15 @@ from .models import User
 
 def admin_account_summary() -> dict[str, int]:
     return User.objects.aggregate(
-        total=Count("pk"),
+        total=Count("pk", filter=~Q(status=UserStatus.DELETED)),
         active=Count("pk", filter=Q(status=UserStatus.ACTIVE)),
         inactive=Count("pk", filter=Q(status=UserStatus.INACTIVE)),
         deleted=Count("pk", filter=Q(status=UserStatus.DELETED)),
-        teachers=Count("pk", filter=Q(role=UserRole.TEACHER)),
-        support_teachers=Count("pk", filter=Q(role=UserRole.SUPPORT_TEACHER)),
-        students=Count("pk", filter=Q(role=UserRole.STUDENT)),
+        teachers=Count("pk", filter=Q(role=UserRole.TEACHER) & ~Q(status=UserStatus.DELETED)),
+        support_teachers=Count(
+            "pk", filter=Q(role=UserRole.SUPPORT_TEACHER) & ~Q(status=UserStatus.DELETED)
+        ),
+        students=Count("pk", filter=Q(role=UserRole.STUDENT) & ~Q(status=UserStatus.DELETED)),
     )
 
 
@@ -84,17 +86,21 @@ def _with_teacher_directory_data(queryset: QuerySet[User]) -> QuerySet[User]:
 
 
 def admin_accounts() -> QuerySet[User]:
-    return _with_teacher_directory_data(User.objects.all()).order_by("full_name", "email")
+    visible_accounts = User.objects.exclude(status=UserStatus.DELETED)
+    return _with_teacher_directory_data(visible_accounts).order_by("full_name", "email")
 
 
 def teacher_directory() -> QuerySet[User]:
     """Teacher kartalari uchun kurs va hisoblangan statistikalarni tayyorlaydi."""
-    return _with_teacher_directory_data(User.objects.filter(role__in=EDUCATOR_ROLES))
+    visible_teachers = User.objects.filter(role__in=EDUCATOR_ROLES).exclude(
+        status=UserStatus.DELETED
+    )
+    return _with_teacher_directory_data(visible_teachers)
 
 
 def admin_account_role_summary(role: str) -> dict[str, int]:
     """Tanlangan educator roli bo'yicha paginationdan mustaqil ko'rsatkichlar."""
-    accounts = User.objects.filter(role=role)
+    accounts = User.objects.filter(role=role).exclude(status=UserStatus.DELETED)
     account_counts = accounts.aggregate(
         total_accounts=Count("pk"),
         active_accounts=Count("pk", filter=Q(status=UserStatus.ACTIVE)),
@@ -102,6 +108,7 @@ def admin_account_role_summary(role: str) -> dict[str, int]:
     )
     course_assignments = CourseTeacher.objects.filter(
         teacher__role=role,
+        teacher__status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
         course__status=CourseStatus.ACTIVE,
     )
     students_taught = Enrollment.objects.filter(
@@ -109,6 +116,10 @@ def admin_account_role_summary(role: str) -> dict[str, int]:
         status=EnrollmentStatus.ACTIVE,
         student__status=UserStatus.ACTIVE,
         course__course_teachers__teacher__role=role,
+        course__course_teachers__teacher__status__in=[
+            UserStatus.ACTIVE,
+            UserStatus.INACTIVE,
+        ],
     ).aggregate(total=Count("student_id", distinct=True))["total"]
     return {
         **account_counts,
@@ -119,14 +130,19 @@ def admin_account_role_summary(role: str) -> dict[str, int]:
 
 def teacher_directory_summary() -> dict:
     """Teacher directory tepasidagi umumiy ko'rsatkichlar."""
-    teacher_counts = User.objects.filter(role__in=EDUCATOR_ROLES).aggregate(
-        active_teachers=Count("pk", filter=Q(status=UserStatus.ACTIVE)),
-        inactive_teachers=Count("pk", filter=Q(status=UserStatus.INACTIVE)),
-        total_teachers=Count("pk"),
+    teacher_counts = (
+        User.objects.filter(role__in=EDUCATOR_ROLES)
+        .exclude(status=UserStatus.DELETED)
+        .aggregate(
+            active_teachers=Count("pk", filter=Q(status=UserStatus.ACTIVE)),
+            inactive_teachers=Count("pk", filter=Q(status=UserStatus.INACTIVE)),
+            total_teachers=Count("pk"),
+        )
     )
     course_assignments = CourseTeacher.objects.filter(
         course__status=CourseStatus.ACTIVE,
         teacher__role__in=EDUCATOR_ROLES,
+        teacher__status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
     ).count()
     # Join ataylab teacher kesimida sanaydi: bitta enrollment kursdagi har bir
     # teacher kartasining students_count qiymatiga bittadan qo'shiladi.
@@ -135,6 +151,10 @@ def teacher_directory_summary() -> dict:
         status=EnrollmentStatus.ACTIVE,
         student__status=UserStatus.ACTIVE,
         course__course_teachers__teacher__role__in=EDUCATOR_ROLES,
+        course__course_teachers__teacher__status__in=[
+            UserStatus.ACTIVE,
+            UserStatus.INACTIVE,
+        ],
     ).count()
 
     return {
@@ -204,6 +224,7 @@ def student_directory() -> QuerySet[User]:
 
     return (
         User.objects.filter(role=UserRole.STUDENT)
+        .exclude(status=UserStatus.DELETED)
         .annotate(
             courses_count=_count_for_user(
                 Enrollment,
@@ -230,18 +251,24 @@ def student_directory() -> QuerySet[User]:
 
 def student_directory_summary() -> dict:
     """Student directory tepasidagi umumiy ko'rsatkichlar."""
-    student_counts = User.objects.filter(role=UserRole.STUDENT).aggregate(
-        total_students=Count("pk"),
-        active_students=Count("pk", filter=Q(status=UserStatus.ACTIVE)),
-        inactive_students=Count("pk", filter=Q(status=UserStatus.INACTIVE)),
+    student_counts = (
+        User.objects.filter(role=UserRole.STUDENT)
+        .exclude(status=UserStatus.DELETED)
+        .aggregate(
+            total_students=Count("pk"),
+            active_students=Count("pk", filter=Q(status=UserStatus.ACTIVE)),
+            inactive_students=Count("pk", filter=Q(status=UserStatus.INACTIVE)),
+        )
     )
     course_enrollments = Enrollment.objects.filter(
         student__role=UserRole.STUDENT,
+        student__status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
         status=EnrollmentStatus.ACTIVE,
         course__status=CourseStatus.ACTIVE,
     ).count()
     latest_graded = ExamAttempt.objects.filter(
         status=AttemptStatus.GRADED,
+        student__status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
         pk=_latest_graded_pk(),
     )
     result_stats = latest_graded.aggregate(
