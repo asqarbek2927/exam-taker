@@ -115,10 +115,15 @@ Create requestda password yuborilmaydi:
   "full_name":"Madina Karimova",
   "email":"madina@example.com",
   "role":"STUDENT",
+  "avatar_url":"https://cdn.example.com/avatars/madina.png",
   "phone_number":"+998901234567",
   "location":"Tashkent"
 }
 ```
+
+`avatar_url` optional. Berilsa backend public HTTP(S) URL’dan JPEG/PNG/WEBP rasmni yuklab,
+5 MB limit bilan o‘z media storage’iga saqlaydi; response tashqi URL emas, lokal `avatar_url`
+qaytaradi. Private/local/reserved hostlar qabul qilinmaydi.
 
 Response'da `account`, top-level `temporary_password` va `temporary_password_expires_at` qaytadi.
 Parol faqat create yoki temporary-password response'ida bir marta chiqadi, 24 soat amal qiladi va

@@ -6,6 +6,7 @@ from drf_spectacular.utils import (
 )
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -278,9 +279,12 @@ class AdminAccountViewSet(
     def create(self, request, *args, **kwargs):
         serializer = AdminAccountCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user, password, _issued_at, expires_at = services.create_admin_account(
-            actor=request.user, **serializer.validated_data
-        )
+        try:
+            user, password, _issued_at, expires_at = services.create_admin_account(
+                actor=request.user, **serializer.validated_data
+            )
+        except services.RemoteAvatarError as exc:
+            raise ValidationError({"avatar_url": [str(exc)]}) from exc
         payload = {
             "account": AdminAccountDetailSerializer(user, context={"request": request}).data,
             "temporary_password": password,

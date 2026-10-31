@@ -400,6 +400,7 @@ class AdminAccountCreateSerializer(serializers.Serializer):
     full_name = serializers.CharField(max_length=255)
     email = serializers.EmailField(max_length=254)
     role = serializers.ChoiceField(choices=CreatableUserRole.choices)
+    avatar_url = serializers.URLField(required=False, allow_blank=True, write_only=True, default="")
     phone_number = serializers.RegexField(
         regex=r"^\+998\d{9}$", required=False, allow_blank=True, default=""
     )

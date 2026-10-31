@@ -1,12 +1,20 @@
 """Yozish (write) business logic — users."""
 
+import ipaddress
 import secrets
+import socket
 from datetime import datetime, timedelta
+from io import BytesIO
+from urllib.error import HTTPError, URLError
+from urllib.parse import urljoin, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from django.contrib.auth import password_validation
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from PIL import Image, UnidentifiedImageError
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from common.exceptions import BusinessRuleError, ConflictError
@@ -20,6 +28,91 @@ PASSWORD_LOWERCASE = "abcdefghijkmnopqrstuvwxyz"
 PASSWORD_UPPERCASE = "ABCDEFGHJKLMNPQRSTUVWXYZ"
 PASSWORD_DIGITS = "23456789"
 PASSWORD_SYMBOLS = "!@#$%&*+-_?"
+REMOTE_AVATAR_MAX_BYTES = 5 * 1024 * 1024
+REMOTE_AVATAR_MAX_PIXELS = 25_000_000
+REMOTE_AVATAR_TIMEOUT_SECONDS = 5
+REMOTE_AVATAR_MAX_REDIRECTS = 3
+REMOTE_AVATAR_FORMATS = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
+
+
+class RemoteAvatarError(ValueError):
+    """Remote avatar URL xavfsiz yoki yaroqli rasm bo'lmaganda."""
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _validate_public_remote_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise RemoteAvatarError("Faqat public HTTP yoki HTTPS rasm URL yuboring.")
+    if parsed.username or parsed.password:
+        raise RemoteAvatarError("Login ma'lumoti bor URL qabul qilinmaydi.")
+    try:
+        addresses = socket.getaddrinfo(
+            parsed.hostname,
+            parsed.port or (443 if parsed.scheme == "https" else 80),
+            type=socket.SOCK_STREAM,
+        )
+    except (OSError, ValueError) as exc:
+        raise RemoteAvatarError("Avatar URL hostini aniqlab bo'lmadi.") from exc
+    if not addresses or any(
+        not ipaddress.ip_address(address[4][0]).is_global for address in addresses
+    ):
+        raise RemoteAvatarError("Private, local yoki reserved hostlardan rasm olinmaydi.")
+
+
+def download_remote_avatar(url: str) -> ContentFile:
+    """Public URL'dagi rasmni limitlar bilan yuklab, local storage uchun tayyorlaydi."""
+    opener = build_opener(_NoRedirectHandler())
+    current_url = url
+    payload = None
+    for redirect_number in range(REMOTE_AVATAR_MAX_REDIRECTS + 1):
+        _validate_public_remote_url(current_url)
+        request = Request(current_url, headers={"User-Agent": "ExamTaker/1.0"})
+        try:
+            response = opener.open(request, timeout=REMOTE_AVATAR_TIMEOUT_SECONDS)
+        except HTTPError as exc:
+            if exc.code in {301, 302, 303, 307, 308}:
+                location = exc.headers.get("Location")
+                if not location or redirect_number == REMOTE_AVATAR_MAX_REDIRECTS:
+                    raise RemoteAvatarError("Avatar URL redirect limiti oshdi.") from exc
+                current_url = urljoin(current_url, location)
+                continue
+            raise RemoteAvatarError(f"Avatar URL HTTP {exc.code} qaytardi.") from exc
+        except (OSError, URLError) as exc:
+            raise RemoteAvatarError("Avatar URL'dan rasmni yuklab bo'lmadi.") from exc
+
+        with response:
+            content_length = response.headers.get("Content-Length")
+            if content_length:
+                try:
+                    if int(content_length) > REMOTE_AVATAR_MAX_BYTES:
+                        raise RemoteAvatarError("Rasm hajmi 5 MB dan oshmasligi kerak.")
+                except ValueError as exc:
+                    raise RemoteAvatarError(
+                        "Avatar URL noto'g'ri Content-Length qaytardi."
+                    ) from exc
+            payload = response.read(REMOTE_AVATAR_MAX_BYTES + 1)
+        if len(payload) > REMOTE_AVATAR_MAX_BYTES:
+            raise RemoteAvatarError("Rasm hajmi 5 MB dan oshmasligi kerak.")
+        break
+
+    if payload is None:
+        raise RemoteAvatarError("Avatar URL'dan rasmni yuklab bo'lmadi.")
+    try:
+        with Image.open(BytesIO(payload)) as image:
+            if image.format not in REMOTE_AVATAR_FORMATS:
+                raise RemoteAvatarError("Faqat JPEG, PNG yoki WEBP rasm qabul qilinadi.")
+            if image.width * image.height > REMOTE_AVATAR_MAX_PIXELS:
+                raise RemoteAvatarError("Rasm o'lchamlari juda katta.")
+            image.verify()
+            extension = REMOTE_AVATAR_FORMATS[image.format]
+    except (UnidentifiedImageError, OSError) as exc:
+        raise RemoteAvatarError("URL yaroqli JPEG, PNG yoki WEBP rasm qaytarmadi.") from exc
+    return ContentFile(payload, name=f"remote-avatar.{extension}")
 
 
 def generate_random_password(length: int = PASSWORD_LENGTH) -> str:
@@ -160,18 +253,32 @@ def _record_account_audit(*, actor, action, user: User, metadata=None) -> None:
     )
 
 
-@transaction.atomic
 def create_admin_account(*, actor, **fields) -> tuple[User, str, datetime, datetime]:
     from apps.audit.choices import AuditAction
 
-    user, password = create_user(password=None, **fields)
-    issued_at = user.temporary_password_expires_at - timedelta(hours=24)
-    _record_account_audit(
-        actor=actor,
-        action=AuditAction.ACCOUNT_CREATED,
-        user=user,
-        metadata={"role": user.role, "status": user.status, "version": user.version},
-    )
+    remote_avatar_url = fields.pop("avatar_url", "")
+    avatar_file = download_remote_avatar(remote_avatar_url) if remote_avatar_url else None
+    user = None
+    stored_avatar_name = ""
+    try:
+        with transaction.atomic():
+            user, password = create_user(password=None, **fields)
+            if avatar_file is not None:
+                user.avatar.save(avatar_file.name, avatar_file, save=False)
+                stored_avatar_name = user.avatar.name
+                user.avatar_url = ""
+                user.save(update_fields=["avatar", "avatar_url", "updated_at"])
+            issued_at = user.temporary_password_expires_at - timedelta(hours=24)
+            _record_account_audit(
+                actor=actor,
+                action=AuditAction.ACCOUNT_CREATED,
+                user=user,
+                metadata={"role": user.role, "status": user.status, "version": user.version},
+            )
+    except Exception:
+        if user is not None and stored_avatar_name:
+            user.avatar.storage.delete(stored_avatar_name)
+        raise
     return user, password, issued_at, user.temporary_password_expires_at
 
 

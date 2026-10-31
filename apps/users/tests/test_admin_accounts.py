@@ -2,6 +2,7 @@ from datetime import timedelta
 from io import BytesIO
 
 import pytest
+from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 from PIL import Image
@@ -19,6 +20,7 @@ from apps.attempts.tests.factories import AttemptFactory
 from apps.audit.choices import AuditAction
 from apps.audit.models import AuditLog
 from apps.exams.tests.factories import ExamFactory
+from apps.users import services
 from apps.users.choices import UserStatus
 from apps.users.models import User
 from apps.users.tests.factories import (
@@ -46,6 +48,12 @@ def create_payload(**overrides):
     return payload
 
 
+def png_bytes() -> bytes:
+    image = BytesIO()
+    Image.new("RGB", (2, 2), color="green").save(image, format="PNG")
+    return image.getvalue()
+
+
 @pytest.mark.parametrize("fixture_name", ["teacher", "student"])
 def test_admin_accounts_requires_super_admin(request, auth_client, fixture_name):
     response = auth_client(request.getfixturevalue(fixture_name)).get(ACCOUNTS)
@@ -68,6 +76,80 @@ def test_create_returns_one_time_credentials_and_audits(auth_client, admin):
     assert user.location == "Tashkent"
     assert user.temporary_password_expires_at > timezone.now() + timedelta(hours=23)
     assert AuditLog.objects.filter(entity_id=user.pk, action=AuditAction.ACCOUNT_CREATED).exists()
+
+
+def test_create_downloads_optional_avatar_url_to_local_storage(
+    auth_client, admin, monkeypatch, settings, tmp_path
+):
+    settings.MEDIA_ROOT = tmp_path
+    requested_urls = []
+
+    def fake_download(url):
+        requested_urls.append(url)
+        return ContentFile(png_bytes(), name="remote-avatar.png")
+
+    monkeypatch.setattr(services, "download_remote_avatar", fake_download)
+    response = auth_client(admin).post(
+        ACCOUNTS,
+        create_payload(avatar_url="https://cdn.example.com/student.png"),
+        format="json",
+    )
+
+    assert response.status_code == 201
+    assert requested_urls == ["https://cdn.example.com/student.png"]
+    assert "/media/avatars/" in response.json()["account"]["avatar_url"]
+    user = User.objects.get(pk=response.json()["account"]["id"])
+    assert user.avatar.name.startswith("avatars/")
+    assert user.avatar_url == ""
+    assert (tmp_path / user.avatar.name).exists()
+
+
+def test_create_returns_avatar_url_validation_error(auth_client, admin, monkeypatch):
+    def reject_download(_url):
+        raise services.RemoteAvatarError("URL yaroqli rasm qaytarmadi.")
+
+    monkeypatch.setattr(services, "download_remote_avatar", reject_download)
+    response = auth_client(admin).post(
+        ACCOUNTS,
+        create_payload(avatar_url="https://cdn.example.com/not-image"),
+        format="json",
+    )
+
+    assert response.status_code == 422
+    assert "avatar_url" in response.json()["errors"]
+    assert not User.objects.filter(email="madina@example.com").exists()
+
+
+def test_remote_avatar_downloader_validates_image_bytes(monkeypatch):
+    class FakeResponse:
+        headers = {}
+
+        def read(self, _limit):
+            return png_bytes()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class FakeOpener:
+        def open(self, _request, timeout):
+            assert timeout == services.REMOTE_AVATAR_TIMEOUT_SECONDS
+            return FakeResponse()
+
+    monkeypatch.setattr(services, "build_opener", lambda *_args: FakeOpener())
+    monkeypatch.setattr(services, "_validate_public_remote_url", lambda _url: None)
+
+    avatar = services.download_remote_avatar("https://cdn.example.com/avatar")
+
+    assert avatar.name == "remote-avatar.png"
+    assert avatar.read() == png_bytes()
+
+
+def test_remote_avatar_rejects_private_host():
+    with pytest.raises(services.RemoteAvatarError, match="Private"):
+        services._validate_public_remote_url("http://127.0.0.1/avatar.png")
 
 
 @pytest.mark.parametrize("role", ["TEACHER", "SUPPORT_TEACHER", "STUDENT"])

@@ -4140,6 +4140,14 @@ components:
           maxLength: 254
         role:
           $ref: '#/components/schemas/CreatableUserRoleEnum'
+        avatar_url:
+          writeOnly: true
+          oneOf:
+          - type: string
+            format: uri
+            default: ''
+          - type: string
+            maxLength: 0
         phone_number:
           oneOf:
           - type: string

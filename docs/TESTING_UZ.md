@@ -146,7 +146,7 @@ Account yaratish — admin parol yubormaydi; server temporary password beradi:
 
 ```bash
 ACC=$(curl -s -X POST $B/admin/accounts -H "$AH" -H 'Content-Type: application/json' \
-  -d '{"full_name":"Madina Karimova","email":"madina@example.com","role":"STUDENT","phone_number":"+998901234567","location":"Tashkent"}')
+  -d '{"full_name":"Madina Karimova","email":"madina@example.com","role":"STUDENT","avatar_url":"https://cdn.example.com/madina.png","phone_number":"+998901234567","location":"Tashkent"}')
 echo "$ACC" | python3 -m json.tool
 ```
 
@@ -156,6 +156,8 @@ Tekshiring:
 - `temporary_password` faqat shu create/reset javobida bir marta chiqadi;
 - `account.must_change_password=true`, `version=1`;
 - `password`, `course_ids`, `group_ids` yuborilsa `422`.
+- optional `avatar_url` public HTTP(S) rasmni backendga yuklatadi; local/private URL, noto‘g‘ri
+  format yoki 5 MB dan katta rasm `422` qaytaradi.
 
 Keyingi amallar (`ID` va `VERSION`ni response’dan oling):
 
@@ -257,7 +259,7 @@ endpointlari backward compatibility uchun saqlangan.
 ## 5. Avtomatik testlar
 
 ```bash
-make test        # PostgreSQL: 555 passed
+make test        # PostgreSQL: 559 passed
 make lint
 make schema      # OpenAPI validatsiyasi
 ```
