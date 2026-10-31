@@ -1,5 +1,4 @@
 import pytest
-from django.db import IntegrityError, transaction
 
 from apps.academics.choices import CourseTeacherType, EnrollmentStatus
 from apps.academics.models import CourseTeacher, Enrollment
@@ -48,7 +47,7 @@ def test_assign_same_teacher_twice_returns_409(auth_client, admin):
     assert response.json()["status_code"] == 409
 
 
-def test_cannot_assign_second_main_teacher(auth_client, admin):
+def test_can_assign_multiple_main_teachers(auth_client, admin):
     existing = CourseTeacherFactory(type=CourseTeacherType.MAIN)
     teacher = TeacherFactory()
 
@@ -58,19 +57,20 @@ def test_cannot_assign_second_main_teacher(auth_client, admin):
         format="json",
     )
 
-    assert response.status_code == 409
-    assert response.json()["message"] == "Bu kursga MAIN teacher allaqachon biriktirilgan."
+    assert response.status_code == 201
     assert (
         CourseTeacher.objects.filter(course=existing.course, type=CourseTeacherType.MAIN).count()
-        == 1
+        == 2
     )
 
 
-def test_database_rejects_second_main_teacher():
+def test_database_allows_multiple_main_teachers():
     existing = CourseTeacherFactory(type=CourseTeacherType.MAIN)
-
-    with pytest.raises(IntegrityError), transaction.atomic():
-        CourseTeacherFactory(course=existing.course, type=CourseTeacherType.MAIN)
+    CourseTeacherFactory(course=existing.course, type=CourseTeacherType.MAIN)
+    assert (
+        CourseTeacher.objects.filter(course=existing.course, type=CourseTeacherType.MAIN).count()
+        == 2
+    )
 
 
 def test_cannot_assign_non_teacher(auth_client, admin, student):
@@ -125,7 +125,7 @@ def test_cannot_remove_teacher_used_by_group(auth_client, admin):
     assert CourseTeacher.objects.filter(pk=assignment.pk).exists()
 
 
-def test_cannot_change_second_teacher_to_main(auth_client, admin):
+def test_can_change_second_teacher_to_main(auth_client, admin):
     course = CourseFactory()
     CourseTeacherFactory(course=course, type=CourseTeacherType.MAIN)
     support = CourseTeacherFactory(course=course, type=CourseTeacherType.SUPPORT)
@@ -134,9 +134,9 @@ def test_cannot_change_second_teacher_to_main(auth_client, admin):
         f"{teachers_url(course)}/{support.id}", {"type": "MAIN"}, format="json"
     )
 
-    assert response.status_code == 409
+    assert response.status_code == 200
     support.refresh_from_db()
-    assert support.type == CourseTeacherType.SUPPORT
+    assert support.type == CourseTeacherType.MAIN
 
 
 def test_teacher_cannot_touch_another_courses_assignment(auth_client, admin):

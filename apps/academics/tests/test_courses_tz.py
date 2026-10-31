@@ -14,8 +14,8 @@ pytestmark = pytest.mark.django_db
 
 
 def test_course_tz_create_filter_detail_and_optimistic_update(auth_client, admin):
-    main = TeacherFactory(full_name="Main Teacher")
-    support = TeacherFactory(full_name="Support Teacher")
+    mains = TeacherFactory.create_batch(2)
+    supports = TeacherFactory.create_batch(2)
     client = auth_client(admin)
 
     created = client.post(
@@ -23,8 +23,8 @@ def test_course_tz_create_filter_detail_and_optimistic_update(auth_client, admin
         {
             "name": "Python Advanced",
             "description": "TZ course",
-            "mainTeacherId": str(main.id),
-            "teacherIds": [str(main.id), str(support.id)],
+            "mainTeacherIds": [str(item.id) for item in mains],
+            "supportTeacherIds": [str(item.id) for item in supports],
             "status": "DRAFT",
         },
         format="json",
@@ -33,13 +33,13 @@ def test_course_tz_create_filter_detail_and_optimistic_update(auth_client, admin
     assert created.status_code == 201
     body = created.json()
     assert body["version"] == 1
-    assert body["main_teacher"]["id"] == str(main.id)
-    assert len(body["support_teachers"]) == 1
+    assert {item["id"] for item in body["main_teachers"]} == {str(item.id) for item in mains}
+    assert {item["id"] for item in body["support_teachers"]} == {str(item.id) for item in supports}
     assert body["actions"]["can_edit"] is True
 
-    found = client.get("/api/v1/courses", {"q": "advanced", "teacherId": str(support.id)}).json()[
-        "data"
-    ]
+    found = client.get(
+        "/api/v1/courses", {"q": "advanced", "teacherId": str(supports[0].id)}
+    ).json()["data"]
     assert [item["id"] for item in found] == [body["id"]]
 
     updated = client.patch(

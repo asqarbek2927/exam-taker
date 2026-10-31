@@ -34,11 +34,6 @@ class CourseTeacher(UUIDModel):
         ordering = ["type", "assigned_at"]  # MAIN < SUPPORT
         constraints = [
             models.UniqueConstraint(fields=["course", "teacher"], name="uniq_course_teacher"),
-            models.UniqueConstraint(
-                fields=["course"],
-                condition=models.Q(type=CourseTeacherType.MAIN),
-                name="uniq_main_teacher_per_course",
-            ),
         ]
 
     def __str__(self) -> str:

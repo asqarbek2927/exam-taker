@@ -29,15 +29,15 @@ class CourseMutationSerializer(serializers.Serializer):
     status = serializers.ChoiceField(
         choices=[CourseStatus.DRAFT, CourseStatus.ACTIVE], required=False
     )
-    main_teacher_id = UUIDRelatedField(
+    main_teacher_ids = UUIDRelatedField(
         queryset=User.objects.filter(role=UserRole.TEACHER).exclude(status=UserStatus.DELETED),
-        source="main_teacher",
+        source="main_teachers",
+        many=True,
         required=False,
-        allow_null=True,
     )
-    teacher_ids = UUIDRelatedField(
+    support_teacher_ids = UUIDRelatedField(
         queryset=User.objects.filter(role__in=EDUCATOR_ROLES).exclude(status=UserStatus.DELETED),
-        source="teachers",
+        source="support_teachers",
         many=True,
         required=False,
     )
@@ -45,24 +45,45 @@ class CourseMutationSerializer(serializers.Serializer):
 
     def to_internal_value(self, data):
         data = data.copy()
-        aliases = {"mainTeacherId": "main_teacher_id", "teacherIds": "teacher_ids"}
+        aliases = {
+            "mainTeacherIds": "main_teacher_ids",
+            "supportTeacherIds": "support_teacher_ids",
+        }
         for source, target in aliases.items():
             if source in data and target not in data:
                 data[target] = data[source]
+        legacy_main = data.get("mainTeacherId") or data.get("main_teacher_id")
+        if legacy_main and "main_teacher_ids" not in data:
+            data["main_teacher_ids"] = [legacy_main]
+        legacy_teachers = data.get("teacherIds") or data.get("teacher_ids")
+        if legacy_teachers is not None and "support_teacher_ids" not in data:
+            main_ids = {str(item) for item in data.get("main_teacher_ids", [])}
+            data["support_teacher_ids"] = [
+                item for item in legacy_teachers if str(item) not in main_ids
+            ]
         return super().to_internal_value(data)
 
     def validate(self, attrs):
-        main = attrs.get("main_teacher", serializers.empty)
-        teachers = attrs.get("teachers")
-        if main is not serializers.empty and main is not None and teachers is not None:
-            teacher_ids = {teacher.pk for teacher in teachers}
-            teacher_ids.add(main.pk)
-            attrs["teachers"] = list(
-                User.objects.filter(pk__in=teacher_ids)
-                .exclude(status=UserStatus.DELETED)
-                .order_by("full_name", "pk")
+        mains = attrs.get("main_teachers", [])
+        supports = attrs.get("support_teachers", [])
+        if {teacher.pk for teacher in mains} & {teacher.pk for teacher in supports}:
+            raise serializers.ValidationError(
+                {"support_teacher_ids": ["Bitta teacher MAIN va SUPPORT bo'la olmaydi."]}
             )
         return attrs
+
+
+class CourseCreateSerializer(CourseMutationSerializer):
+    """Yangi kurs server tomonidan version=1 bilan yaratiladi."""
+
+    version = None
+
+    def validate(self, attrs):
+        if "version" in self.initial_data:
+            raise serializers.ValidationError(
+                {"version": ["Course yaratishda version yuborilmaydi."]}
+            )
+        return super().validate(attrs)
 
 
 class CourseStatusSerializer(serializers.Serializer):
@@ -106,7 +127,7 @@ class CourseListSerializer(serializers.ModelSerializer):
 
 
 class CourseDetailSerializer(CourseListSerializer):
-    main_teacher = serializers.SerializerMethodField()
+    main_teachers = serializers.SerializerMethodField()
     support_teachers = serializers.SerializerMethodField()
     modules = serializers.SerializerMethodField()
     actions = serializers.SerializerMethodField()
@@ -114,20 +135,21 @@ class CourseDetailSerializer(CourseListSerializer):
     class Meta(CourseListSerializer.Meta):
         fields = [
             *CourseListSerializer.Meta.fields,
-            "main_teacher",
+            "main_teachers",
             "support_teachers",
             "modules",
             "actions",
         ]
         read_only_fields = fields
 
-    @extend_schema_field(UserBriefSerializer(allow_null=True))
-    def get_main_teacher(self, obj: Course):
+    @extend_schema_field(UserBriefSerializer(many=True))
+    def get_main_teachers(self, obj: Course):
         # `course_teachers` selectors.with_course_stats() da prefetch qilingan.
-        for ct in obj.course_teachers.all():
-            if ct.type == CourseTeacherType.MAIN:
-                return UserBriefSerializer(ct.teacher).data
-        return None
+        return [
+            UserBriefSerializer(ct.teacher).data
+            for ct in obj.course_teachers.all()
+            if ct.type == CourseTeacherType.MAIN
+        ]
 
     @extend_schema_field(UserBriefSerializer(many=True))
     def get_support_teachers(self, obj: Course):

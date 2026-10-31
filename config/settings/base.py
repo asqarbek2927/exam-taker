@@ -103,7 +103,6 @@ PASSWORD_HASHERS = [
 ]
 
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
@@ -183,6 +182,7 @@ SPECTACULAR_SETTINGS = {
         "CreatableUserRoleEnum": "apps.users.choices.CreatableUserRole",
         "UserStatusEnum": "apps.users.choices.UserStatus",
         "CourseStatusEnum": "apps.academics.choices.CourseStatus",
+        "CourseWritableStatusEnum": ["DRAFT", "ACTIVE"],
         # Module va Question statuslari bir xil to‘plam (ACTIVE/ARCHIVED).
         "ActiveArchivedStatusEnum": "apps.academics.choices.ModuleStatus",
         "CourseTeacherTypeEnum": "apps.academics.choices.CourseTeacherType",

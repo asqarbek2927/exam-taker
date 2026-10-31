@@ -28,7 +28,7 @@ def test_admin_creates_and_updates_course(auth_client, admin):
     assert body["status"] == "ACTIVE"
     assert body["teachers_count"] == 0
     assert body["students_count"] == 0
-    assert body["main_teacher"] is None
+    assert body["main_teachers"] == []
     assert body["support_teachers"] == []
 
     updated = client.patch(f"{COURSES}/{body['id']}", {"name": "Django 5"}, format="json")
@@ -43,16 +43,15 @@ def test_create_course_validation(auth_client, admin):
     assert "name" in response.json()["errors"]
 
 
-def test_create_course_does_not_forward_client_version_to_service(auth_client, admin):
+def test_create_course_rejects_client_version(auth_client, admin):
     response = auth_client(admin).post(
         COURSES,
         {"name": "Versioned create", "description": "Backend", "version": 99},
         format="json",
     )
 
-    assert response.status_code == 201
-    assert response.json()["name"] == "Versioned create"
-    assert response.json()["version"] == 1
+    assert response.status_code == 422
+    assert "version" in response.json()["errors"]
 
 
 def test_admin_can_create_draft_and_activate_course(auth_client, admin):
@@ -134,14 +133,18 @@ def test_counts_are_not_distorted_by_role_scoping(auth_client, teacher, student)
         assert body["students_count"] == 2
 
 
-def test_course_detail_has_main_and_support_teachers(auth_client, admin):
+def test_course_detail_has_multiple_main_and_support_teachers(auth_client, admin):
     course = CourseFactory()
-    main = CourseTeacherFactory(course=course, type=CourseTeacherType.MAIN).teacher
-    support = CourseTeacherFactory(course=course, type=CourseTeacherType.SUPPORT).teacher
+    mains = CourseTeacherFactory.create_batch(2, course=course, type=CourseTeacherType.MAIN)
+    supports = CourseTeacherFactory.create_batch(2, course=course, type=CourseTeacherType.SUPPORT)
 
     body = auth_client(admin).get(f"{COURSES}/{course.id}").json()
-    assert body["main_teacher"]["id"] == str(main.id)
-    assert [t["id"] for t in body["support_teachers"]] == [str(support.id)]
+    assert {item["id"] for item in body["main_teachers"]} == {
+        str(item.teacher_id) for item in mains
+    }
+    assert {item["id"] for item in body["support_teachers"]} == {
+        str(item.teacher_id) for item in supports
+    }
 
 
 def test_course_list_includes_teachers_and_filters_by_teacher(auth_client, admin):

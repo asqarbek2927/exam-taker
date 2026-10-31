@@ -220,7 +220,7 @@ class ChangeOwnPasswordView(APIView):
     ),
     destroy=extend_schema(
         tags=["admin-accounts"],
-        request=AccountVersionSerializer,
+        request=None,
         responses={204: OpenApiResponse(description="Account soft-delete qilindi.")},
     ),
 )
@@ -343,12 +343,9 @@ class AdminAccountViewSet(
         return Response(AdminAccountDetailSerializer(user, context={"request": request}).data)
 
     def destroy(self, request, *args, **kwargs):
-        serializer = AccountVersionSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
         services.soft_delete_account(
             user=self.get_object(),
             actor=request.user,
-            expected_version=serializer.validated_data["version"],
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
 

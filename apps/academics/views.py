@@ -33,6 +33,7 @@ from .models import CourseTeacher, Enrollment, GroupStudent, Module, StudyGroup
 from .serializers import (
     AcademicStudentCourseCardSerializer,
     CourseCatalogSummarySerializer,
+    CourseCreateSerializer,
     CourseDetailSerializer,
     CourseListSerializer,
     CourseMutationSerializer,
@@ -71,7 +72,7 @@ COURSE_PK = OpenApiParameter(
     list=extend_schema(tags=["courses"], responses={200: CourseListSerializer(many=True)}),
     retrieve=extend_schema(tags=["courses"], responses={200: CourseDetailSerializer}),
     create=extend_schema(
-        tags=["courses"], request=CourseMutationSerializer, responses={201: CourseDetailSerializer}
+        tags=["courses"], request=CourseCreateSerializer, responses={201: CourseDetailSerializer}
     ),
     partial_update=extend_schema(
         tags=["courses"], request=CourseMutationSerializer, responses={200: CourseDetailSerializer}
@@ -117,14 +118,11 @@ class CourseViewSet(
         )
 
     def create(self, request, *args, **kwargs):
-        serializer = CourseMutationSerializer(data=request.data)
+        serializer = CourseCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         if "name" not in serializer.validated_data:
             raise ValidationError({"name": ["This field is required."]})
-        create_fields = dict(serializer.validated_data)
-        # `version` faqat update optimistic-lock uchun; yangi kurs versioni serverda 1 bo'ladi.
-        create_fields.pop("version", None)
-        course = services.create_course(**create_fields)
+        course = services.create_course(**serializer.validated_data)
         return self._detail_response(course.pk, status.HTTP_201_CREATED)
 
     def partial_update(self, request, *args, **kwargs):

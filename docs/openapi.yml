@@ -921,7 +921,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CourseMutationRequest'
+              $ref: '#/components/schemas/CourseCreateRequest'
       security:
       - jwtAuth: []
       responses:
@@ -5455,6 +5455,28 @@ components:
       - draft_courses
       - learning_modules
       - total_courses
+    CourseCreateRequest:
+      type: object
+      description: Yangi kurs server tomonidan version=1 bilan yaratiladi.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/CourseWritableStatusEnum'
+        main_teacher_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        support_teacher_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
     CourseDetail:
       type: object
       properties:
@@ -5506,10 +5528,10 @@ components:
           type: string
           format: date-time
           readOnly: true
-        main_teacher:
-          allOf:
-          - $ref: '#/components/schemas/UserBrief'
-          nullable: true
+        main_teachers:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserBrief'
           readOnly: true
         support_teachers:
           type: array
@@ -5534,7 +5556,7 @@ components:
       - exams_count
       - groups_count
       - id
-      - main_teacher
+      - main_teachers
       - modules
       - modules_count
       - name
@@ -5612,39 +5634,6 @@ components:
       - teachers_count
       - updated_at
       - version
-    CourseMutationRequest:
-      type: object
-      description: TZ course payload; camelCase va eski snake_case nomlarini qabul
-        qiladi.
-      properties:
-        name:
-          type: string
-          minLength: 1
-          maxLength: 255
-        description:
-          type: string
-        status:
-          $ref: '#/components/schemas/CourseMutationStatusEnum'
-        main_teacher_id:
-          type: string
-          format: uuid
-          nullable: true
-        teacher_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        version:
-          type: integer
-          minimum: 1
-    CourseMutationStatusEnum:
-      enum:
-      - DRAFT
-      - ACTIVE
-      type: string
-      description: |-
-        * `DRAFT` - DRAFT
-        * `ACTIVE` - ACTIVE
     CourseOverview:
       type: object
       properties:
@@ -5730,6 +5719,14 @@ components:
       description: |-
         * `MAIN` - Main
         * `SUPPORT` - Support
+    CourseWritableStatusEnum:
+      enum:
+      - DRAFT
+      - ACTIVE
+      type: string
+      description: |-
+        * `DRAFT` - DRAFT
+        * `ACTIVE` - ACTIVE
     CoursesSummary:
       type: object
       properties:
@@ -6487,10 +6484,12 @@ components:
         main_teacher:
           allOf:
           - $ref: '#/components/schemas/UserBrief'
+          nullable: true
           readOnly: true
         support_teacher:
           allOf:
           - $ref: '#/components/schemas/UserBrief'
+          nullable: true
           readOnly: true
         students_count:
           type: integer
@@ -6557,10 +6556,12 @@ components:
         main_teacher:
           allOf:
           - $ref: '#/components/schemas/UserBrief'
+          nullable: true
           readOnly: true
         support_teacher:
           allOf:
           - $ref: '#/components/schemas/UserBrief'
+          nullable: true
           readOnly: true
         students_count:
           type: integer
@@ -7437,12 +7438,13 @@ components:
         description:
           type: string
         status:
-          $ref: '#/components/schemas/CourseMutationStatusEnum'
-        main_teacher_id:
-          type: string
-          format: uuid
-          nullable: true
-        teacher_ids:
+          $ref: '#/components/schemas/CourseWritableStatusEnum'
+        main_teacher_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        support_teacher_ids:
           type: array
           items:
             type: string

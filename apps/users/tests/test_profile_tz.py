@@ -189,3 +189,18 @@ def test_change_password_without_confirmation_clears_temporary_flag(api_client):
     assert user.must_change_password is False
     assert user.temporary_password_expires_at is None
     assert login(api_client, user.username, new_password).status_code == 200
+
+
+def test_change_password_allows_password_similar_to_username(api_client):
+    user = TeacherFactory(email="asqar@example.com")
+    authenticate(api_client, user)
+
+    response = api_client.post(
+        PASSWORD,
+        {"current_password": DEFAULT_PASSWORD, "new_password": "Asqar123"},
+        format="json",
+    )
+
+    assert response.status_code == 204
+    user.refresh_from_db()
+    assert user.check_password("Asqar123")

@@ -30,6 +30,7 @@ def test_login_request_contract_has_one_identifier_field():
 def test_common_password_validator_is_disabled():
     validators = password_validation.get_default_password_validators()
     assert not any(type(item).__name__ == "CommonPasswordValidator" for item in validators)
+    assert not any(type(item).__name__ == "UserAttributeSimilarityValidator" for item in validators)
 
 
 @pytest.mark.parametrize(

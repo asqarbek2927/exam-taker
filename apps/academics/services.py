@@ -12,7 +12,6 @@ from .choices import CourseStatus, CourseTeacherType, EnrollmentStatus, GroupSta
 from .models import Course, CourseTeacher, Enrollment, GroupStudent, Module, StudyGroup
 
 ARCHIVED_COURSE = "Arxivlangan kursga o‘zgartirish kiritib bo‘lmaydi."
-MAIN_TEACHER_TAKEN = "Bu kursga MAIN teacher allaqachon biriktirilgan."
 WRITABLE_COURSE_STATUSES = (CourseStatus.DRAFT, CourseStatus.ACTIVE)
 
 
@@ -30,16 +29,16 @@ def create_course(
     name: str,
     description: str = "",
     status: str = CourseStatus.ACTIVE,
-    main_teacher: User | None = None,
-    teachers: list[User] | None = None,
+    main_teachers: list[User] | None = None,
+    support_teachers: list[User] | None = None,
 ) -> Course:
     if status not in WRITABLE_COURSE_STATUSES:
         raise BusinessRuleError("Kurs faqat DRAFT yoki ACTIVE holatda yaratiladi.")
     course = Course.objects.create(name=name, description=description, status=status)
     _replace_course_teachers(
         course=course,
-        main_teacher=main_teacher,
-        teachers=teachers or ([] if main_teacher is None else [main_teacher]),
+        main_teachers=main_teachers or [],
+        support_teachers=support_teachers or [],
     )
     return course
 
@@ -55,22 +54,28 @@ def update_course(course: Course, **fields) -> Course:
         raise ConflictError(
             "Kurs versiyasi eskirgan. Maâ€™lumotni yangilab qayta urinib koâ€˜ring."
         )
-    teachers_supplied = "teachers" in fields
-    main_supplied = "main_teacher" in fields
-    teachers = fields.pop("teachers", None)
-    main_teacher = fields.pop("main_teacher", None)
+    main_supplied = "main_teachers" in fields
+    support_supplied = "support_teachers" in fields
+    main_teachers = fields.pop("main_teachers", None)
+    support_teachers = fields.pop("support_teachers", None)
     changed = [name for name in ("name", "description", "status") if name in fields]
     for name in changed:
         setattr(course, name, fields[name])
-    if teachers_supplied or main_supplied:
+    if main_supplied or support_supplied:
         current = list(course.course_teachers.select_related("teacher"))
-        if not teachers_supplied:
-            teachers = [item.teacher for item in current]
         if not main_supplied:
-            main_teacher = next(
-                (item.teacher for item in current if item.type == CourseTeacherType.MAIN), None
-            )
-        _replace_course_teachers(course=course, main_teacher=main_teacher, teachers=teachers or [])
+            main_teachers = [
+                item.teacher for item in current if item.type == CourseTeacherType.MAIN
+            ]
+        if not support_supplied:
+            support_teachers = [
+                item.teacher for item in current if item.type == CourseTeacherType.SUPPORT
+            ]
+        _replace_course_teachers(
+            course=course,
+            main_teachers=main_teachers or [],
+            support_teachers=support_teachers or [],
+        )
         changed.append("course_teachers")
     if changed:
         course.version += 1
@@ -80,18 +85,20 @@ def update_course(course: Course, **fields) -> Course:
 
 
 def _replace_course_teachers(
-    *, course: Course, main_teacher: User | None, teachers: list[User]
+    *, course: Course, main_teachers: list[User], support_teachers: list[User]
 ) -> None:
-    unique = {teacher.pk: teacher for teacher in teachers}
-    if main_teacher is not None:
-        unique[main_teacher.pk] = main_teacher
-    for teacher in unique.values():
+    mains = {teacher.pk: teacher for teacher in main_teachers}
+    supports = {teacher.pk: teacher for teacher in support_teachers}
+    if mains.keys() & supports.keys():
+        raise BusinessRuleError("Bitta teacher bir kursda MAIN va SUPPORT bo'la olmaydi.")
+    for teacher in [*mains.values(), *supports.values()]:
         if teacher.role not in EDUCATOR_ROLES or teacher.status != UserStatus.ACTIVE:
             raise BusinessRuleError("Kursga faqat faol educator biriktiriladi.")
-    if main_teacher is not None and main_teacher.role != UserRole.TEACHER:
-        raise BusinessRuleError("MAIN teacher faol TEACHER rolida boâ€˜lishi kerak.")
+    if any(teacher.role != UserRole.TEACHER for teacher in mains.values()):
+        raise BusinessRuleError("MAIN teacherlar faol TEACHER rolida bo'lishi kerak.")
 
-    removed_ids = set(course.course_teachers.values_list("teacher_id", flat=True)) - set(unique)
+    assigned_ids = set(mains) | set(supports)
+    removed_ids = set(course.course_teachers.values_list("teacher_id", flat=True)) - assigned_ids
     if (
         removed_ids
         and StudyGroup.objects.filter(course=course)
@@ -106,13 +113,13 @@ def _replace_course_teachers(
             CourseTeacher(
                 course=course,
                 teacher=teacher,
-                type=(
-                    CourseTeacherType.MAIN
-                    if main_teacher is not None and teacher.pk == main_teacher.pk
-                    else CourseTeacherType.SUPPORT
-                ),
+                type=teacher_type,
             )
-            for teacher in unique.values()
+            for teacher_type, teachers in (
+                (CourseTeacherType.MAIN, mains.values()),
+                (CourseTeacherType.SUPPORT, supports.values()),
+            )
+            for teacher in teachers
         ]
     )
 
@@ -153,14 +160,6 @@ def restore_course(course: Course) -> Course:
 # --------------------------------------------------------------------------
 # CourseTeacher
 # --------------------------------------------------------------------------
-def _ensure_main_teacher_available(*, course: Course, exclude_id=None) -> None:
-    queryset = CourseTeacher.objects.filter(course=course, type=CourseTeacherType.MAIN)
-    if exclude_id is not None:
-        queryset = queryset.exclude(pk=exclude_id)
-    if queryset.exists():
-        raise ConflictError(MAIN_TEACHER_TAKEN)
-
-
 def assign_teacher(*, course: Course, teacher: User, teacher_type: str) -> CourseTeacher:
     _ensure_course_editable(course)
     if teacher.role not in EDUCATOR_ROLES:
@@ -169,14 +168,10 @@ def assign_teacher(*, course: Course, teacher: User, teacher_type: str) -> Cours
         raise BusinessRuleError("SUPPORT_TEACHER kursning MAIN teacheri bo‘la olmaydi.")
     if teacher.status != UserStatus.ACTIVE:
         raise BusinessRuleError("Nofaol teacherni kursga biriktirib bo‘lmaydi.")
-    if teacher_type == CourseTeacherType.MAIN:
-        _ensure_main_teacher_available(course=course)
     try:
         with transaction.atomic():
             return CourseTeacher.objects.create(course=course, teacher=teacher, type=teacher_type)
     except IntegrityError as exc:
-        if teacher_type == CourseTeacherType.MAIN:
-            raise ConflictError(MAIN_TEACHER_TAKEN) from exc
         raise ConflictError("Bu teacher kursga allaqachon biriktirilgan.") from exc
 
 
@@ -190,18 +185,8 @@ def change_teacher_type(*, course_teacher: CourseTeacher, teacher_type: str) -> 
             and teacher_type == CourseTeacherType.MAIN
         ):
             raise BusinessRuleError("SUPPORT_TEACHER kursning MAIN teacheri bo‘la olmaydi.")
-        if teacher_type == CourseTeacherType.MAIN:
-            _ensure_main_teacher_available(
-                course=course_teacher.course, exclude_id=course_teacher.pk
-            )
         course_teacher.type = teacher_type
-        try:
-            with transaction.atomic():
-                course_teacher.save(update_fields=["type"])
-        except IntegrityError as exc:
-            if teacher_type == CourseTeacherType.MAIN:
-                raise ConflictError(MAIN_TEACHER_TAKEN) from exc
-            raise
+        course_teacher.save(update_fields=["type"])
     return course_teacher
 
 

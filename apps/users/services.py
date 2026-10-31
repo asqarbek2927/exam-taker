@@ -381,14 +381,12 @@ def set_admin_account_status(*, user: User, actor, new_status: str, expected_ver
 
 
 @transaction.atomic
-def soft_delete_account(*, user: User, actor, expected_version: int) -> User:
+def soft_delete_account(*, user: User, actor) -> User:
     from apps.academics.choices import GroupStatus
     from apps.academics.models import StudyGroup
     from apps.audit.choices import AuditAction
 
     user = User.objects.select_for_update().get(pk=user.pk)
-    if user.version != expected_version:
-        raise ConflictError(f"VERSION_CONFLICT: joriy version {user.version}.")
     if user.pk == actor.pk:
         raise BusinessRuleError("O‘zingizni o‘chira olmaysiz.")
     if user.status == UserStatus.DELETED:

@@ -466,7 +466,7 @@ def test_soft_deleted_teacher_is_hidden_from_account_list_and_role_summary(
 ):
     client = auth_client(admin)
 
-    deleted = client.delete(f"{ACCOUNTS}/{teacher.id}", {"version": teacher.version}, format="json")
+    deleted = client.delete(f"{ACCOUNTS}/{teacher.id}")
     accounts = client.get(ACCOUNTS, {"role": "TEACHER"})
     summary = client.get(f"{ACCOUNTS}/summary", {"role": "TEACHER"})
 
