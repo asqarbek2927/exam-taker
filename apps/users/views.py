@@ -1,7 +1,7 @@
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -24,8 +24,10 @@ from .serializers import (
     AdminAccountCreateResponseSerializer,
     AdminAccountCreateSerializer,
     AdminAccountDetailSerializer,
+    AdminAccountRoleSummarySerializer,
     AdminAccountSerializer,
     AdminAccountStatusSerializer,
+    AdminAccountSummaryQuerySerializer,
     AdminAccountUpdateSerializer,
     AvatarResponseSerializer,
     AvatarUploadSerializer,
@@ -205,6 +207,11 @@ class ChangeOwnPasswordView(APIView):
         request=AdminAccountUpdateSerializer,
         responses={200: AdminAccountDetailSerializer},
     ),
+    update=extend_schema(
+        tags=["admin-accounts"],
+        request=AdminAccountUpdateSerializer,
+        responses={200: AdminAccountDetailSerializer},
+    ),
     destroy=extend_schema(
         tags=["admin-accounts"],
         request=AccountVersionSerializer,
@@ -219,9 +226,20 @@ class AdminAccountViewSet(
     viewsets.GenericViewSet,
 ):
     permission_classes = [IsSuperAdmin]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
     filterset_class = UserFilter
     search_fields = ["full_name", "email", "username", "phone_number", "location"]
-    ordering_fields = ["full_name", "email", "role", "status", "created_at", "last_login"]
+    ordering_fields = [
+        "full_name",
+        "email",
+        "role",
+        "status",
+        "created_at",
+        "last_login",
+        "courses_count",
+        "students_count",
+        "exams_count",
+    ]
     ordering = ["full_name", "email"]
     lookup_value_regex = UUID_REGEX
     http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
@@ -241,6 +259,17 @@ class AdminAccountViewSet(
         response.data["summary"] = selectors.admin_account_summary()
         return response
 
+    @extend_schema(
+        tags=["admin-accounts"],
+        parameters=[AdminAccountSummaryQuerySerializer],
+        responses={200: AdminAccountRoleSummarySerializer},
+    )
+    @action(detail=False, methods=["get"])
+    def summary(self, request):
+        query = AdminAccountSummaryQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        return Response(selectors.admin_account_role_summary(query.validated_data["role"]))
+
     def create(self, request, *args, **kwargs):
         serializer = AdminAccountCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -254,18 +283,29 @@ class AdminAccountViewSet(
         }
         return Response(payload, status=status.HTTP_201_CREATED)
 
-    def partial_update(self, request, *args, **kwargs):
-        serializer = AdminAccountUpdateSerializer(data=request.data, partial=True)
+    def _update_account(self, request, *, partial: bool):
+        account = self.get_object()
+        serializer = AdminAccountUpdateSerializer(
+            data=request.data,
+            partial=partial,
+            context={"user": account},
+        )
         serializer.is_valid(raise_exception=True)
         fields = dict(serializer.validated_data)
         expected_version = fields.pop("version")
         user = services.update_admin_account(
-            user=self.get_object(),
+            user=account,
             actor=request.user,
             expected_version=expected_version,
             **fields,
         )
         return Response(AdminAccountDetailSerializer(user, context={"request": request}).data)
+
+    def update(self, request, *args, **kwargs):
+        return self._update_account(request, partial=False)
+
+    def partial_update(self, request, *args, **kwargs):
+        return self._update_account(request, partial=True)
 
     def destroy(self, request, *args, **kwargs):
         serializer = AccountVersionSerializer(data=request.data)

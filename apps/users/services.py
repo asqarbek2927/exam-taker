@@ -184,13 +184,26 @@ def update_admin_account(*, user: User, actor, expected_version: int, **fields) 
         raise ConflictError(f"VERSION_CONFLICT: joriy version {user.version}.")
     if user.status == UserStatus.DELETED:
         raise ConflictError("DELETED account tahrirlanmaydi.")
-    changed = [name for name in fields if name in {"full_name", "phone_number", "location"}]
+    changed = [
+        name
+        for name in fields
+        if name in {"full_name", "email", "avatar", "phone_number", "location"}
+    ]
     if not changed:
         return user
+    old_avatar_name = user.avatar.name
+    avatar_storage = user.avatar.storage
     for name in changed:
         setattr(user, name, fields[name])
+    if "avatar" in changed:
+        user.avatar_url = ""
     user.version += 1
-    user.save(update_fields=[*changed, "version", "updated_at"])
+    update_fields = [*changed, "version", "updated_at"]
+    if "avatar" in changed:
+        update_fields.append("avatar_url")
+    user.save(update_fields=update_fields)
+    if "avatar" in changed and old_avatar_name and old_avatar_name != user.avatar.name:
+        transaction.on_commit(lambda: _delete_stored_file(avatar_storage, old_avatar_name))
     _record_account_audit(
         actor=actor,
         action=AuditAction.ACCOUNT_UPDATED,

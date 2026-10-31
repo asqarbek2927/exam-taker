@@ -81,6 +81,8 @@ curl -s $B/profile -H "$SH"                         # avatar_url saqlangan URL
 ```
 
 Canonical multipart kaliti `image`; eski frontend yuboradigan `avatar` kaliti ham qabul qilinadi.
+AWS deployda Nginx 12 MBgacha requestni Django’ga uzatadi; backend avatar faylini 5 MB bilan
+cheklaydi va undan kattasiga JSON `422` qaytaradi.
 
 ### 3. Student o‘z e’lonlarini ko‘radi
 ```bash
@@ -161,13 +163,27 @@ Keyingi amallar (`ID` va `VERSION`ni response’dan oling):
 ID=<account id>; VERSION=1
 curl -s $B/admin/accounts/$ID -H "$AH"
 curl -s -X PATCH $B/admin/accounts/$ID -H "$AH" -H 'Content-Type: application/json' \
-  -d "{\"full_name\":\"Madina K.\",\"location\":\"Samarkand\",\"version\":$VERSION}"
+  -d "{\"full_name\":\"Madina K.\",\"email\":\"madina.new@example.com\",\"location\":\"Samarkand\",\"version\":$VERSION}"
+curl -s -X PUT $B/admin/accounts/$ID -H "$AH" \
+  -F "avatar=@avatar.png" -F "version=2"
 curl -s -X PUT $B/admin/accounts/$ID/status -H "$AH" -H 'Content-Type: application/json' \
-  -d '{"status":"INACTIVE","version":2}'
+  -d '{"status":"INACTIVE","version":3}'
 curl -s -X POST $B/admin/accounts/$ID/temporary-password -H "$AH"
 curl -s $B/admin/accounts/$ID/courses -H "$AH"
 curl -s $B/admin/accounts/$ID/activity -H "$AH"
 ```
+
+Teacher sahifasi faqat admin accounts API orqali:
+
+```bash
+curl -s "$B/admin/accounts?role=TEACHER&course_id=<course-uuid>&ordering=-students_count&page=1&limit=20" -H "$AH"
+curl -s "$B/admin/accounts/summary?role=TEACHER" -H "$AH"
+curl -s "$B/admin/accounts/summary?role=SUPPORT_TEACHER" -H "$AH"
+```
+
+List teacher elementida `assigned_courses`, `courses_count`, distinct `students_count` va
+`exams_count` bor. Summary paginationdan mustaqil hisoblanadi. Eski `/teachers` endpointlari
+Super-admin Teacher sahifasida ishlatilmaydi.
 
 Teacher course assignmentini transactionally almashtirish:
 
@@ -235,7 +251,7 @@ endpointlari backward compatibility uchun saqlangan.
 ## 5. Avtomatik testlar
 
 ```bash
-make test        # PostgreSQL: 538 passed
+make test        # PostgreSQL: 546 passed
 make lint
 make schema      # OpenAPI validatsiyasi
 ```

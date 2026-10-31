@@ -25,10 +25,6 @@ from .choices import EDUCATOR_ROLES, UserRole, UserStatus
 from .models import User
 
 
-def admin_accounts() -> QuerySet[User]:
-    return User.objects.all().order_by("full_name", "email")
-
-
 def admin_account_summary() -> dict[str, int]:
     return User.objects.aggregate(
         total=Count("pk"),
@@ -41,53 +37,84 @@ def admin_account_summary() -> dict[str, int]:
     )
 
 
-def _count_for_user(model, user_field: str, **filters):
+def _count_for_user(model, user_field: str, *, count_field: str = "pk", **filters):
     subquery = (
         model.objects.filter(**{user_field: OuterRef("pk")}, **filters)
         .order_by()
         .values(user_field)
-        .annotate(n=Count("pk", distinct=True))
+        .annotate(n=Count(count_field, distinct=True))
         .values("n")
     )
     return Coalesce(Subquery(subquery, output_field=IntegerField()), 0)
 
 
-def teacher_directory() -> QuerySet[User]:
-    """Teacher kartalari uchun kurs va hisoblangan statistikalarni tayyorlaydi."""
+def _with_teacher_directory_data(queryset: QuerySet[User]) -> QuerySet[User]:
+    """Account kartalariga teacher kurslari va statistikalarini qo'shadi."""
     active_course_assignments = CourseTeacher.objects.filter(
         course__status=CourseStatus.ACTIVE
     ).select_related("course")
 
-    return (
-        User.objects.filter(role__in=EDUCATOR_ROLES)
-        .annotate(
-            courses_count=_count_for_user(
-                CourseTeacher,
-                "teacher",
-                course__status=CourseStatus.ACTIVE,
-            ),
-            students_count=_count_for_user(
-                Enrollment,
-                "course__course_teachers__teacher",
-                course__status=CourseStatus.ACTIVE,
-                status=EnrollmentStatus.ACTIVE,
-                student__status=UserStatus.ACTIVE,
-            ),
-            exams_count=_count_for_user(
-                Exam,
-                "course__course_teachers__teacher",
-                course__status=CourseStatus.ACTIVE,
-                status__in=[ExamStatus.DRAFT, ExamStatus.READY],
-            ),
-        )
-        .prefetch_related(
-            Prefetch(
-                "course_assignments",
-                queryset=active_course_assignments,
-                to_attr="active_course_assignments",
-            )
+    return queryset.annotate(
+        courses_count=_count_for_user(
+            CourseTeacher,
+            "teacher",
+            course__status=CourseStatus.ACTIVE,
+        ),
+        students_count=_count_for_user(
+            Enrollment,
+            "course__course_teachers__teacher",
+            count_field="student_id",
+            course__status=CourseStatus.ACTIVE,
+            status=EnrollmentStatus.ACTIVE,
+            student__status=UserStatus.ACTIVE,
+        ),
+        exams_count=_count_for_user(
+            Exam,
+            "course__course_teachers__teacher",
+            course__status=CourseStatus.ACTIVE,
+            status__in=[ExamStatus.DRAFT, ExamStatus.READY],
+        ),
+    ).prefetch_related(
+        Prefetch(
+            "course_assignments",
+            queryset=active_course_assignments,
+            to_attr="active_course_assignments",
         )
     )
+
+
+def admin_accounts() -> QuerySet[User]:
+    return _with_teacher_directory_data(User.objects.all()).order_by("full_name", "email")
+
+
+def teacher_directory() -> QuerySet[User]:
+    """Teacher kartalari uchun kurs va hisoblangan statistikalarni tayyorlaydi."""
+    return _with_teacher_directory_data(User.objects.filter(role__in=EDUCATOR_ROLES))
+
+
+def admin_account_role_summary(role: str) -> dict[str, int]:
+    """Tanlangan educator roli bo'yicha paginationdan mustaqil ko'rsatkichlar."""
+    accounts = User.objects.filter(role=role)
+    account_counts = accounts.aggregate(
+        total_accounts=Count("pk"),
+        active_accounts=Count("pk", filter=Q(status=UserStatus.ACTIVE)),
+        inactive_accounts=Count("pk", filter=Q(status=UserStatus.INACTIVE)),
+    )
+    course_assignments = CourseTeacher.objects.filter(
+        teacher__role=role,
+        course__status=CourseStatus.ACTIVE,
+    )
+    students_taught = Enrollment.objects.filter(
+        course__status=CourseStatus.ACTIVE,
+        status=EnrollmentStatus.ACTIVE,
+        student__status=UserStatus.ACTIVE,
+        course__course_teachers__teacher__role=role,
+    ).aggregate(total=Count("student_id", distinct=True))["total"]
+    return {
+        **account_counts,
+        "students_taught": students_taught,
+        "course_assignments": course_assignments.count(),
+    }
 
 
 def teacher_directory_summary() -> dict:

@@ -122,6 +122,7 @@ def test_photo_upload_and_delete_for_every_role(
     authenticate(api_client, user)
     uploaded = api_client.post(PHOTO, {"image": image_file()}, format="multipart")
     assert uploaded.status_code == 200
+    assert "/media/avatars/" in uploaded.json()["avatar_url"]
     assert uploaded.json()["avatar_url"].endswith(".png")
     user.refresh_from_db()
     stored_path = tmp_path / user.avatar.name
@@ -156,6 +157,19 @@ def test_photo_rejects_non_image(api_client, teacher):
     response = api_client.post(PHOTO, {"image": bad}, format="multipart")
     assert response.status_code == 422
     assert "image" in response.json()["errors"]
+
+
+def test_photo_rejects_file_larger_than_five_mb(api_client, teacher):
+    authenticate(api_client, teacher)
+    valid_png = image_file().read()
+    oversized = SimpleUploadedFile(
+        "large-avatar.png",
+        valid_png + b"\0" * (5 * 1024 * 1024),
+        content_type="image/png",
+    )
+    response = api_client.post(PHOTO, {"image": oversized}, format="multipart")
+    assert response.status_code == 422
+    assert "5 MB" in str(response.json()["errors"]["image"])
 
 
 def test_change_password_without_confirmation_clears_temporary_flag(api_client):

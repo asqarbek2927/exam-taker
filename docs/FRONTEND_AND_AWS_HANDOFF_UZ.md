@@ -158,6 +158,7 @@ Ikkinchi so‘rovning `401` qaytarishi server ishlayotganini bildiradi.
 - Nginx port `80`da Gunicorn/Django’ga reverse proxy qiladi.
 - PostgreSQL private Docker networkda qoladi va tashqi portga publish qilinmaydi.
 - Migration container startida avtomatik bajariladi.
+- `media-init` redeployda avatar volume ownership va read/write permissionlarini tiklaydi.
 - Avatarlar `media_data` volume’da saqlanadi va Nginx `/media/` orqali beradi.
 - PostgreSQL ma’lumoti `postgres_data` volume’da saqlanadi.
 - Web/finalizer/nginx/db restartdan keyin avtomatik qayta turadi.

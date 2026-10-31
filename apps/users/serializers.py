@@ -4,6 +4,7 @@ from django.contrib.auth import password_validation
 from django.contrib.auth.models import update_last_login
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
@@ -175,8 +176,17 @@ class StudentDirectorySummarySerializer(serializers.Serializer):
 # --------------------------------------------------------------------------
 # Admin accounts (TZ #10-19)
 # --------------------------------------------------------------------------
+class AdminAssignedCourseSerializer(serializers.Serializer):
+    id = serializers.UUIDField(source="course_id", read_only=True)
+    name = serializers.CharField(source="course.name", read_only=True)
+
+
 class AdminAccountSerializer(serializers.ModelSerializer):
     avatar_url = serializers.SerializerMethodField()
+    assigned_courses = serializers.SerializerMethodField()
+    courses_count = serializers.SerializerMethodField()
+    students_count = serializers.SerializerMethodField()
+    exams_count = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -194,11 +204,72 @@ class AdminAccountSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "version",
+            "assigned_courses",
+            "courses_count",
+            "students_count",
+            "exams_count",
         ]
         read_only_fields = fields
 
     def get_avatar_url(self, obj: User) -> str:
         return UserSerializer(obj, context=self.context).data["avatar_url"]
+
+    @extend_schema_field(AdminAssignedCourseSerializer(many=True))
+    def get_assigned_courses(self, obj: User) -> list[dict]:
+        from apps.academics.choices import CourseStatus
+
+        assignments = getattr(obj, "active_course_assignments", None)
+        if assignments is None:
+            assignments = obj.course_assignments.filter(
+                course__status=CourseStatus.ACTIVE
+            ).select_related("course")
+        return AdminAssignedCourseSerializer(assignments, many=True).data
+
+    def get_courses_count(self, obj: User) -> int:
+        return getattr(obj, "courses_count", len(self.get_assigned_courses(obj)))
+
+    def get_students_count(self, obj: User) -> int:
+        if hasattr(obj, "students_count"):
+            return obj.students_count
+        from apps.academics.choices import CourseStatus, EnrollmentStatus
+        from apps.academics.models import Enrollment
+
+        return (
+            Enrollment.objects.filter(
+                course__course_teachers__teacher=obj,
+                course__status=CourseStatus.ACTIVE,
+                status=EnrollmentStatus.ACTIVE,
+                student__status=UserStatus.ACTIVE,
+            )
+            .values("student_id")
+            .distinct()
+            .count()
+        )
+
+    def get_exams_count(self, obj: User) -> int:
+        if hasattr(obj, "exams_count"):
+            return obj.exams_count
+        from apps.academics.choices import CourseStatus
+        from apps.exams.choices import ExamStatus
+        from apps.exams.models import Exam
+
+        return Exam.objects.filter(
+            course__course_teachers__teacher=obj,
+            course__status=CourseStatus.ACTIVE,
+            status__in=[ExamStatus.DRAFT, ExamStatus.READY],
+        ).count()
+
+
+class AdminAccountSummaryQuerySerializer(serializers.Serializer):
+    role = serializers.ChoiceField(choices=[UserRole.TEACHER, UserRole.SUPPORT_TEACHER])
+
+
+class AdminAccountRoleSummarySerializer(serializers.Serializer):
+    total_accounts = serializers.IntegerField()
+    active_accounts = serializers.IntegerField()
+    inactive_accounts = serializers.IntegerField()
+    students_taught = serializers.IntegerField()
+    course_assignments = serializers.IntegerField()
 
 
 class AdminAccountDetailSerializer(AdminAccountSerializer):
@@ -349,12 +420,31 @@ class AdminAccountCreateResponseSerializer(serializers.Serializer):
 
 class AdminAccountUpdateSerializer(serializers.Serializer):
     full_name = serializers.CharField(max_length=255, required=False)
+    email = serializers.EmailField(max_length=254, required=False)
+    avatar = serializers.ImageField(required=False, write_only=True)
     phone_number = serializers.RegexField(regex=r"^\+998\d{9}$", required=False, allow_blank=True)
     location = serializers.CharField(max_length=255, required=False, allow_blank=True)
     version = serializers.IntegerField(min_value=1)
 
+    def validate_email(self, value: str) -> str:
+        value = value.strip().lower()
+        queryset = User.objects.filter(email__iexact=value)
+        user = self.context.get("user")
+        if user is not None:
+            queryset = queryset.exclude(pk=user.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Bu email allaqachon ro'yxatdan o'tgan.")
+        return value
+
+    def validate_avatar(self, value):
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Rasm hajmi 5 MB dan oshmasligi kerak.")
+        if getattr(value, "content_type", "") not in {"image/jpeg", "image/png", "image/webp"}:
+            raise serializers.ValidationError("Faqat JPEG, PNG yoki WEBP rasm yuboring.")
+        return value
+
     def validate(self, attrs):
-        forbidden = {"email", "role", "status"}.intersection(self.initial_data)
+        forbidden = {"role", "status"}.intersection(self.initial_data)
         if forbidden:
             raise serializers.ValidationError(
                 {name: ["Bu maydon ushbu endpoint orqali o‘zgartirilmaydi."] for name in forbidden}
@@ -442,10 +532,12 @@ class AvatarUploadSerializer(serializers.Serializer):
 
     def to_internal_value(self, data):
         """Model nomidagi `avatar` kalitini schema'ni ko'paytirmasdan qabul qiladi."""
-        normalized = data.copy()
-        if not normalized.get("image") and data.get("avatar"):
-            normalized["image"] = data.get("avatar")
-        return super().to_internal_value(normalized)
+        if data.get("image"):
+            return super().to_internal_value(data)
+        if data.get("avatar"):
+            # QueryDict.copy() TemporaryUploadedFile'ni deepcopy qiladi va katta faylda 500 beradi.
+            return super().to_internal_value({"image": data.get("avatar")})
+        return super().to_internal_value(data)
 
     def validate_image(self, value):
         if value.size > 5 * 1024 * 1024:

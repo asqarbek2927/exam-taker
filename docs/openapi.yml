@@ -8,6 +8,11 @@ paths:
     get:
       operationId: v1_admin_accounts_list
       parameters:
+      - in: query
+        name: course_id
+        schema:
+          type: string
+          format: uuid
       - name: limit
         required: false
         in: query
@@ -78,6 +83,12 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AdminAccountCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminAccountCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminAccountCreateRequest'
         required: true
       security:
       - jwtAuth: []
@@ -109,6 +120,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/AdminAccountDetail'
           description: ''
+    put:
+      operationId: v1_admin_accounts_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+        required: true
+      tags:
+      - admin-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminAccountUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminAccountUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminAccountUpdateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountDetail'
+          description: ''
     patch:
       operationId: v1_admin_accounts_partial_update
       parameters:
@@ -123,6 +166,12 @@ paths:
       requestBody:
         content:
           application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminAccountUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminAccountUpdateRequest'
+          application/x-www-form-urlencoded:
             schema:
               $ref: '#/components/schemas/PatchedAdminAccountUpdateRequest'
       security:
@@ -154,6 +203,11 @@ paths:
     get:
       operationId: v1_admin_accounts_activity_list
       parameters:
+      - in: query
+        name: course_id
+        schema:
+          type: string
+          format: uuid
       - in: path
         name: id
         schema:
@@ -225,6 +279,11 @@ paths:
     get:
       operationId: v1_admin_accounts_courses_list
       parameters:
+      - in: query
+        name: course_id
+        schema:
+          type: string
+          format: uuid
       - in: path
         name: id
         schema:
@@ -309,6 +368,12 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AdminAccountStatusRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminAccountStatusRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminAccountStatusRequest'
         required: true
       security:
       - jwtAuth: []
@@ -323,6 +388,11 @@ paths:
     put:
       operationId: v1_admin_accounts_teaching_courses_update
       parameters:
+      - in: query
+        name: course_id
+        schema:
+          type: string
+          format: uuid
       - in: path
         name: id
         schema:
@@ -386,6 +456,12 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TeachingCoursesUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TeachingCoursesUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TeachingCoursesUpdateRequest'
         required: true
       security:
       - jwtAuth: []
@@ -416,6 +492,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdminAccountCreateResponse'
+          description: ''
+  /api/v1/admin/accounts/summary:
+    get:
+      operationId: v1_admin_accounts_summary_retrieve
+      parameters:
+      - in: query
+        name: role
+        schema:
+          enum:
+          - TEACHER
+          - SUPPORT_TEACHER
+          type: string
+          minLength: 1
+        description: |-
+          * `TEACHER` - TEACHER
+          * `SUPPORT_TEACHER` - SUPPORT_TEACHER
+        required: true
+      tags:
+      - admin-accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountRoleSummary'
           description: ''
   /api/v1/admin/dashboard:
     get:
@@ -3955,10 +4058,27 @@ components:
         version:
           type: integer
           readOnly: true
+        assigned_courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAssignedCourse'
+          readOnly: true
+        courses_count:
+          type: integer
+          readOnly: true
+        students_count:
+          type: integer
+          readOnly: true
+        exams_count:
+          type: integer
+          readOnly: true
       required:
+      - assigned_courses
       - avatar_url
+      - courses_count
       - created_at
       - email
+      - exams_count
       - full_name
       - id
       - location
@@ -3966,6 +4086,7 @@ components:
       - phone_number
       - role
       - status
+      - students_count
       - updated_at
       - username
       - version
@@ -4060,6 +4181,20 @@ components:
         version:
           type: integer
           readOnly: true
+        assigned_courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAssignedCourse'
+          readOnly: true
+        courses_count:
+          type: integer
+          readOnly: true
+        students_count:
+          type: integer
+          readOnly: true
+        exams_count:
+          type: integer
+          readOnly: true
         courses:
           type: array
           items:
@@ -4083,11 +4218,14 @@ components:
           readOnly: true
           nullable: true
       required:
+      - assigned_courses
       - avatar_url
       - courses
+      - courses_count
       - created_at
       - email
       - exam_stats
+      - exams_count
       - full_name
       - groups
       - id
@@ -4097,9 +4235,29 @@ components:
       - phone_number
       - role
       - status
+      - students_count
       - updated_at
       - username
       - version
+    AdminAccountRoleSummary:
+      type: object
+      properties:
+        total_accounts:
+          type: integer
+        active_accounts:
+          type: integer
+        inactive_accounts:
+          type: integer
+        students_taught:
+          type: integer
+        course_assignments:
+          type: integer
+      required:
+      - active_accounts
+      - course_assignments
+      - inactive_accounts
+      - students_taught
+      - total_accounts
     AdminAccountStatusRequest:
       type: object
       properties:
@@ -4119,6 +4277,49 @@ components:
       description: |-
         * `ACTIVE` - ACTIVE
         * `INACTIVE` - INACTIVE
+    AdminAccountUpdateRequest:
+      type: object
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        avatar:
+          type: string
+          format: binary
+          writeOnly: true
+        phone_number:
+          oneOf:
+          - type: string
+            pattern: ^\+998\d{9}$
+          - type: string
+            maxLength: 0
+        location:
+          type: string
+          maxLength: 255
+        version:
+          type: integer
+          minimum: 1
+      required:
+      - version
+    AdminAssignedCourse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - name
     AdminDashboard:
       type: object
       properties:
@@ -7119,6 +7320,15 @@ components:
           type: string
           minLength: 1
           maxLength: 255
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        avatar:
+          type: string
+          format: binary
+          writeOnly: true
         phone_number:
           oneOf:
           - type: string

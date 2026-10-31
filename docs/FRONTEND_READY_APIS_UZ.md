@@ -91,19 +91,18 @@ Bu endpointlarning hammasi faqat `SUPER_ADMIN` uchun.
 
 | Method | Path | Vazifa |
 | --- | --- | --- |
-| GET | `/admin/accounts` | Role/status/search filterli account directory va summary |
+| GET | `/admin/accounts` | Role/status/course/search/order/pagination filterli account directory |
+| GET | `/admin/accounts/summary?role=TEACHER` | Teacher yoki support teacher uchun umumiy ko‘rsatkichlar |
 | POST | `/admin/accounts` | Server-generated temporary credential bilan account yaratish |
 | GET | `/admin/accounts/{id}` | Courses, groups, exam stats va last activity bilan detail |
-| PATCH | `/admin/accounts/{id}` | Name/phone/locationni optimistic version bilan tahrirlash |
+| PUT/PATCH | `/admin/accounts/{id}` | Name/email/avatar/phone/locationni optimistic version bilan tahrirlash |
 | PUT | `/admin/accounts/{id}/status` | `ACTIVE/INACTIVE`, session revoke bilan |
 | DELETE | `/admin/accounts/{id}` | Soft delete; tarixiy attempt/result saqlanadi |
 | POST | `/admin/accounts/{id}/temporary-password` | Yangi bir martalik temporary password |
 | GET | `/admin/accounts/{id}/courses` | Role-specific enrolled/teaching courses |
 | PUT | `/admin/accounts/{id}/teaching-courses` | Teacher course assignmentlarini transactionally almashtirish |
 | GET | `/admin/accounts/{id}/activity` | Real paged account audit log |
-| GET | `/teachers` | Teacher directory |
-| GET | `/teachers/{id}` | Teacher detail/statistika |
-| GET | `/teachers/summary` | Teacher summary kartalari |
+| GET | `/teachers...` | Legacy; yangi Super-admin Teacher sahifasi foydalanmaydi |
 | GET | `/students` | Student directory |
 | GET | `/students/{id}` | Student detail/statistika |
 | GET | `/students/summary` | Student summary kartalari |
@@ -134,6 +133,12 @@ login qilganda `must_change_password=true` qaytadi. Rollar: `TEACHER`, `SUPPORT_
 
 Eski `/users` operatsiyalari olib tashlangan. Account boshqaruvi uchun faqat
 `/admin/accounts` kontrakti ishlatiladi.
+
+`role=TEACHER` yoki `role=SUPPORT_TEACHER` bilan list elementlarida
+`assigned_courses: [{id, name}]`, `courses_count`, distinct `students_count` va `exams_count`
+qaytadi. `course_id` filtri mavjud. Alohida summary paginationdan mustaqil ravishda
+`total_accounts`, `active_accounts`, `inactive_accounts`, `students_taught` va
+`course_assignments` qaytaradi.
 
 ## 3. Courses — tayyor
 

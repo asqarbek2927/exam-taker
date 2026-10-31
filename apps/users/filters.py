@@ -9,10 +9,11 @@ from .models import User
 class UserFilter(django_filters.FilterSet):
     role = django_filters.ChoiceFilter(choices=UserRole.choices)
     status = django_filters.ChoiceFilter(choices=UserStatus.choices)
+    course_id = django_filters.UUIDFilter(field_name="course_assignments__course_id")
 
     class Meta:
         model = User
-        fields = ["role", "status"]
+        fields = ["role", "status", "course_id"]
 
 
 class PersonFilter(django_filters.FilterSet):

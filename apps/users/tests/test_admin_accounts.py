@@ -1,7 +1,10 @@
 from datetime import timedelta
+from io import BytesIO
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
+from PIL import Image
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 
 from apps.academics.choices import CourseTeacherType
@@ -15,10 +18,12 @@ from apps.academics.tests.factories import (
 from apps.attempts.tests.factories import AttemptFactory
 from apps.audit.choices import AuditAction
 from apps.audit.models import AuditLog
+from apps.exams.tests.factories import ExamFactory
 from apps.users.choices import UserStatus
 from apps.users.models import User
 from apps.users.tests.factories import (
     DEFAULT_PASSWORD,
+    StudentFactory,
     SupportTeacherFactory,
     TeacherFactory,
 )
@@ -106,6 +111,96 @@ def test_create_support_teacher_and_list_summary(auth_client, admin):
     assert response.json()["summary"]["support_teachers"] == 1
 
 
+def test_list_teacher_accounts_contains_distinct_stats_and_filters_by_course(auth_client, admin):
+    teacher = TeacherFactory(full_name="Teacher With Stats")
+    support = SupportTeacherFactory(full_name="Support With Stats")
+    first_course = CourseFactory(name="First course")
+    second_course = CourseFactory(name="Second course")
+    CourseTeacherFactory(teacher=teacher, course=first_course)
+    CourseTeacherFactory(teacher=teacher, course=second_course)
+    CourseTeacherFactory(
+        teacher=support,
+        course=first_course,
+        type=CourseTeacherType.SUPPORT,
+    )
+    student = StudentFactory()
+    EnrollmentFactory(course=first_course, student=student)
+    EnrollmentFactory(course=second_course, student=student)
+    ExamFactory.create_batch(2, course=first_course, created_by=teacher)
+    ExamFactory(course=second_course, created_by=teacher)
+
+    response = auth_client(admin).get(
+        ACCOUNTS,
+        {
+            "role": "TEACHER",
+            "course_id": str(second_course.id),
+            "search": "Teacher With Stats",
+            "ordering": "-exams_count",
+            "page": 1,
+            "limit": 10,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["pagination"]["total"] == 1
+    body = response.json()["data"][0]
+    assert body["id"] == str(teacher.id)
+    assert body["assigned_courses"] == [
+        {"id": str(first_course.id), "name": "First course"},
+        {"id": str(second_course.id), "name": "Second course"},
+    ]
+    assert body["courses_count"] == 2
+    assert body["students_count"] == 1
+    assert body["exams_count"] == 3
+
+
+@pytest.mark.parametrize("role", ["TEACHER", "SUPPORT_TEACHER"])
+def test_account_summary_is_role_scoped_and_not_paginated(auth_client, admin, role):
+    active_teacher = TeacherFactory()
+    TeacherFactory(status=UserStatus.INACTIVE)
+    support = SupportTeacherFactory()
+    first_course = CourseFactory()
+    second_course = CourseFactory()
+    CourseTeacherFactory(teacher=active_teacher, course=first_course)
+    CourseTeacherFactory(teacher=active_teacher, course=second_course)
+    CourseTeacherFactory(
+        teacher=support,
+        course=first_course,
+        type=CourseTeacherType.SUPPORT,
+    )
+    student = StudentFactory()
+    EnrollmentFactory(course=first_course, student=student)
+    EnrollmentFactory(course=second_course, student=student)
+
+    response = auth_client(admin).get(f"{ACCOUNTS}/summary", {"role": role, "limit": 1})
+
+    assert response.status_code == 200
+    expected = {
+        "TEACHER": {
+            "total_accounts": 2,
+            "active_accounts": 1,
+            "inactive_accounts": 1,
+            "students_taught": 1,
+            "course_assignments": 2,
+        },
+        "SUPPORT_TEACHER": {
+            "total_accounts": 1,
+            "active_accounts": 1,
+            "inactive_accounts": 0,
+            "students_taught": 1,
+            "course_assignments": 1,
+        },
+    }
+    assert response.json() == expected[role]
+
+
+@pytest.mark.parametrize("params", [{}, {"role": "STUDENT"}])
+def test_account_summary_requires_educator_role(auth_client, admin, params):
+    response = auth_client(admin).get(f"{ACCOUNTS}/summary", params)
+    assert response.status_code == 422
+    assert "role" in response.json()["errors"]
+
+
 def test_detail_contains_role_specific_courses_groups_and_stats(auth_client, admin):
     teacher = TeacherFactory()
     course = CourseFactory()
@@ -125,23 +220,24 @@ def test_detail_contains_role_specific_courses_groups_and_stats(auth_client, adm
     }
 
 
-def test_patch_is_versioned_and_immutable_fields_are_rejected(auth_client, admin, teacher):
+def test_patch_is_versioned_and_updates_email(auth_client, admin, teacher):
     client = auth_client(admin)
-    rejected = client.patch(
+    email_updated = client.patch(
         f"{ACCOUNTS}/{teacher.id}",
         {"email": "changed@example.com", "version": teacher.version},
         format="json",
     )
-    assert rejected.status_code == 422
-    assert "email" in rejected.json()["errors"]
+    assert email_updated.status_code == 200
+    assert email_updated.json()["email"] == "changed@example.com"
+    assert email_updated.json()["version"] == 2
 
     updated = client.patch(
         f"{ACCOUNTS}/{teacher.id}",
-        {"full_name": "Updated Teacher", "location": "Samarkand", "version": teacher.version},
+        {"full_name": "Updated Teacher", "location": "Samarkand", "version": 2},
         format="json",
     )
     assert updated.status_code == 200
-    assert updated.json()["version"] == 2
+    assert updated.json()["version"] == 3
 
     conflict = client.patch(
         f"{ACCOUNTS}/{teacher.id}",
@@ -149,6 +245,36 @@ def test_patch_is_versioned_and_immutable_fields_are_rejected(auth_client, admin
         format="json",
     )
     assert conflict.status_code == 409
+
+
+def test_put_updates_admin_account_avatar(auth_client, admin, teacher, settings, tmp_path):
+    settings.MEDIA_ROOT = tmp_path
+    image = BytesIO()
+    Image.new("RGB", (2, 2), color="blue").save(image, format="PNG")
+    avatar = SimpleUploadedFile("teacher.png", image.getvalue(), content_type="image/png")
+
+    response = auth_client(admin).put(
+        f"{ACCOUNTS}/{teacher.id}",
+        {"avatar": avatar, "version": teacher.version},
+        format="multipart",
+    )
+
+    assert response.status_code == 200
+    assert "/media/avatars/" in response.json()["avatar_url"]
+    assert response.json()["version"] == 2
+    teacher.refresh_from_db()
+    assert teacher.avatar.name.endswith(".png")
+
+
+def test_patch_rejects_duplicate_email(auth_client, admin, teacher):
+    existing = TeacherFactory()
+    response = auth_client(admin).patch(
+        f"{ACCOUNTS}/{teacher.id}",
+        {"email": existing.email, "version": teacher.version},
+        format="json",
+    )
+    assert response.status_code == 422
+    assert "email" in response.json()["errors"]
 
 
 def test_status_change_revokes_sessions_and_deleted_cannot_restore(
