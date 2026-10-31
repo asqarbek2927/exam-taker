@@ -121,7 +121,10 @@ class CourseViewSet(
         serializer.is_valid(raise_exception=True)
         if "name" not in serializer.validated_data:
             raise ValidationError({"name": ["This field is required."]})
-        course = services.create_course(**serializer.validated_data)
+        create_fields = dict(serializer.validated_data)
+        # `version` faqat update optimistic-lock uchun; yangi kurs versioni serverda 1 bo'ladi.
+        create_fields.pop("version", None)
+        course = services.create_course(**create_fields)
         return self._detail_response(course.pk, status.HTTP_201_CREATED)
 
     def partial_update(self, request, *args, **kwargs):

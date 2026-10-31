@@ -43,6 +43,18 @@ def test_create_course_validation(auth_client, admin):
     assert "name" in response.json()["errors"]
 
 
+def test_create_course_does_not_forward_client_version_to_service(auth_client, admin):
+    response = auth_client(admin).post(
+        COURSES,
+        {"name": "Versioned create", "description": "Backend", "version": 99},
+        format="json",
+    )
+
+    assert response.status_code == 201
+    assert response.json()["name"] == "Versioned create"
+    assert response.json()["version"] == 1
+
+
 def test_admin_can_create_draft_and_activate_course(auth_client, admin):
     client = auth_client(admin)
     created = client.post(COURSES, {"name": "Draft course", "status": "DRAFT"}, format="json")

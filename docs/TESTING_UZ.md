@@ -259,7 +259,7 @@ endpointlari backward compatibility uchun saqlangan.
 ## 5. Avtomatik testlar
 
 ```bash
-make test        # PostgreSQL: 559 passed
+make test        # PostgreSQL: 560 passed
 make lint
 make schema      # OpenAPI validatsiyasi
 ```
