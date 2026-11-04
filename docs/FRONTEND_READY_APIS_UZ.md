@@ -51,7 +51,7 @@ qilingan rollar (`SUPER_ADMIN`, `TEACHER`, `SUPPORT_TEACHER`, `STUDENT`) uchun b
 Login request:
 
 ```json
-{"username":"teacher","password":"StrongPassword1"}
+{"username_or_email":"teacher yoki teacher@example.com","password":"StrongPassword1"}
 ```
 
 Login response asosiy maydonlari:

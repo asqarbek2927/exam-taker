@@ -633,23 +633,44 @@ class ChangeOwnPasswordSerializer(serializers.Serializer):
 # Auth
 # --------------------------------------------------------------------------
 class LoginSerializer(serializers.Serializer):
-    username = serializers.CharField(trim_whitespace=True, write_only=True)
+    username_or_email = serializers.CharField(
+        trim_whitespace=True,
+        write_only=True,
+        help_text="Username yoki email manzil.",
+    )
     password = serializers.CharField(write_only=True, trim_whitespace=False)
 
     default_error_messages = {
-        "no_active_account": "Username yoki parol noto‘g‘ri, yoki akkaunt faol emas.",
+        "no_active_account": "Username/email yoki parol noto‘g‘ri, yoki akkaunt faol emas.",
     }
 
+    def to_internal_value(self, data):
+        """Eski login kalitlarini canonical `username_or_email` nomiga o'tkazadi."""
+        normalized = data.copy()
+        if not normalized.get("username_or_email"):
+            for alias in ("usernameOrEmail", "username", "email"):
+                if data.get(alias):
+                    normalized["username_or_email"] = data[alias]
+                    break
+        return super().to_internal_value(normalized)
+
     def validate(self, attrs):
-        username = (attrs.get("username") or "").strip()
+        identifier = (attrs.get("username_or_email") or "").strip()
         errors = {}
-        if not username:
-            errors["username"] = ["Username kiriting."]
+        if not identifier:
+            errors["username_or_email"] = ["Username yoki email kiriting."]
         if not attrs.get("password"):
             errors["password"] = ["Password kiriting."]
         if errors:
             raise serializers.ValidationError(errors)
-        user = User.objects.filter(username__iexact=username).first()
+        if "@" in identifier:
+            user = User.objects.filter(email__iexact=identifier).first()
+            if user is None:
+                user = User.objects.filter(username__iexact=identifier).first()
+        else:
+            user = User.objects.filter(username__iexact=identifier).first()
+            if user is None:
+                user = User.objects.filter(email__iexact=identifier).first()
         if user is None or not user.is_active or not user.check_password(attrs["password"]):
             raise AuthenticationFailed(self.error_messages["no_active_account"])
         if (

@@ -154,7 +154,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "60/min",
         "user": "600/min",
-        "login": "5/min",  # (IP + email) bo‘yicha
+        "login": "5/min",  # (IP + username/email) bo‘yicha
         "login_ip": "120/min",  # faqat IP bo‘yicha
     },
     # Nginx/Load balancer orqasida: 1. To‘g‘ridan-to‘g‘ri: 0.

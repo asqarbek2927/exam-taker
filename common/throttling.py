@@ -4,7 +4,7 @@ Maktab/akademiya tarmog‘ida ko‘p foydalanuvchi bitta (NAT) IP dan kiradi, sh
 uchun oddiy IP-limit imtihon boshlanishida haqiqiy studentlarni bloklab qo‘yadi.
 Shu sababli:
 
-* ``LoginRateThrottle``   — (IP + username) juftligi bo‘yicha qat’iy limit
+* ``LoginRateThrottle``   — (IP + username/email) juftligi bo‘yicha qat’iy limit
   (parol terish hujumiga qarshi);
 * ``LoginIPRateThrottle`` — faqat IP bo‘yicha keng limit
   (ommaviy hujumdan himoya).
@@ -16,22 +16,29 @@ from rest_framework.exceptions import ParseError
 from rest_framework.throttling import SimpleRateThrottle
 
 
-def _username_from(request) -> str:
+def _identifier_from(request) -> str:
     try:
         data = request.data
     except ParseError:
         return ""
     if not hasattr(data, "get"):
         return ""
-    return str(data.get("username", "")).strip().lower()
+    value = (
+        data.get("username_or_email")
+        or data.get("usernameOrEmail")
+        or data.get("username")
+        or data.get("email")
+        or ""
+    )
+    return str(value).strip().lower()
 
 
 class LoginRateThrottle(SimpleRateThrottle):
     scope = "login"
 
     def get_cache_key(self, request, view):
-        username_hash = hashlib.sha256(_username_from(request).encode()).hexdigest()[:16]
-        ident = f"{self.get_ident(request)}:{username_hash}"
+        identifier_hash = hashlib.sha256(_identifier_from(request).encode()).hexdigest()[:16]
+        ident = f"{self.get_ident(request)}:{identifier_hash}"
         return self.cache_format % {"scope": self.scope, "ident": ident}
 
 

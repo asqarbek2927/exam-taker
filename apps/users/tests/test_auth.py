@@ -18,11 +18,13 @@ PROFILE = "/api/v1/profile"
 
 
 def login(client, user, password=DEFAULT_PASSWORD):
-    return client.post(LOGIN, {"username": user.username, "password": password}, format="json")
+    return client.post(
+        LOGIN, {"username_or_email": user.username, "password": password}, format="json"
+    )
 
 
 def test_login_request_contract_has_one_identifier_field():
-    assert set(LoginSerializer().fields) == {"username", "password"}
+    assert set(LoginSerializer().fields) == {"username_or_email", "password"}
 
 
 def test_common_password_validator_is_disabled():
@@ -63,7 +65,29 @@ def test_login_success_returns_user_and_tokens(api_client, teacher):
 
 def test_login_username_is_case_insensitive(api_client, teacher):
     response = api_client.post(
-        LOGIN, {"username": teacher.username.upper(), "password": DEFAULT_PASSWORD}, format="json"
+        LOGIN,
+        {"username_or_email": teacher.username.upper(), "password": DEFAULT_PASSWORD},
+        format="json",
+    )
+    assert response.status_code == 200
+
+
+def test_login_email_is_case_insensitive(api_client, teacher):
+    response = api_client.post(
+        LOGIN,
+        {"username_or_email": teacher.email.upper(), "password": DEFAULT_PASSWORD},
+        format="json",
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize("alias", ["username", "usernameOrEmail", "email"])
+def test_login_accepts_legacy_identifier_keys(api_client, teacher, alias):
+    value = teacher.email if alias == "email" else teacher.username
+    response = api_client.post(
+        LOGIN,
+        {alias: value, "password": DEFAULT_PASSWORD},
+        format="json",
     )
     assert response.status_code == 200
 
@@ -74,7 +98,7 @@ def test_login_wrong_password_returns_401_in_error_format(api_client, teacher):
     assert response.json() == {
         "status_code": 401,
         "error": "Unauthorized",
-        "message": "Username yoki parol noto‘g‘ri, yoki akkaunt faol emas.",
+        "message": "Username/email yoki parol noto‘g‘ri, yoki akkaunt faol emas.",
     }
 
 
@@ -88,10 +112,10 @@ def test_login_missing_fields_returns_422(api_client):
     assert response.status_code == 422
     body = response.json()
     assert body["message"] == "Validation failed"
-    assert set(body["errors"]) == {"username", "password"}
+    assert set(body["errors"]) == {"username_or_email", "password"}
 
 
-def test_login_is_throttled_per_ip_and_email(api_client, teacher, monkeypatch):
+def test_login_is_throttled_per_ip_and_identifier(api_client, teacher, monkeypatch):
     monkeypatch.setitem(SimpleRateThrottle.THROTTLE_RATES, "login", "2/min")
     assert login(api_client, teacher, password="bad").status_code == 401
     assert login(api_client, teacher, password="bad").status_code == 401
@@ -113,7 +137,7 @@ def test_login_ip_throttle_blocks_mass_attempts(api_client, monkeypatch):
     monkeypatch.setitem(SimpleRateThrottle.THROTTLE_RATES, "login_ip", "3/min")
     codes = [
         api_client.post(
-            LOGIN, {"username": f"nobody{i}", "password": "x"}, format="json"
+            LOGIN, {"username_or_email": f"nobody{i}", "password": "x"}, format="json"
         ).status_code
         for i in range(5)
     ]

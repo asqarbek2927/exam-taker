@@ -6799,17 +6799,18 @@ components:
     LoginRequest:
       type: object
       properties:
-        username:
+        username_or_email:
           type: string
           writeOnly: true
           minLength: 1
+          description: Username yoki email manzil.
         password:
           type: string
           writeOnly: true
           minLength: 1
       required:
       - password
-      - username
+      - username_or_email
     LoginResponse:
       type: object
       description: Faqat OpenAPI sxemasi uchun.
