@@ -119,7 +119,7 @@ def test_malformed_payloads_return_422(started, world):
     assert too_long.status_code == 422
 
 
-def test_revision_is_required_and_prevents_stale_overwrite(started, world):
+def test_revision_is_required_allows_choice_change_and_prevents_stale_overwrite(started, world):
     client, attempt_id = started
     question = world.q["single"]
     right = option_id(question, "Right")
@@ -135,8 +135,10 @@ def test_revision_is_required_and_prevents_stale_overwrite(started, world):
     retry = client.answer(attempt_id, world.eq["single"], option_ids=[right], revision=3)
     assert retry.status_code == 200 and retry.json()["revision"] == 3
 
-    conflict = client.answer(attempt_id, world.eq["single"], option_ids=[wrong], revision=3)
-    assert conflict.status_code == 409
+    changed = client.answer(attempt_id, world.eq["single"], option_ids=[wrong], revision=3)
+    assert changed.status_code == 200
+    assert changed.json()["option_ids"] == [wrong]
+    assert changed.json()["revision"] == 4
     stale = client.answer(attempt_id, world.eq["single"], option_ids=[wrong], revision=2)
     assert stale.status_code == 409
 

@@ -523,7 +523,9 @@ def _store_answer(
         same_payload = answer.text_answer == (text_answer or "") and current_options == set(chosen)
         if same_payload:
             return answer
-        raise ConflictError(f"Revision {revision} boshqa payload bilan allaqachon saqlangan.")
+        # Client oxirgi server revisionini yuboradi: foydalanuvchi A dan B ga
+        # o‘tganda bu oddiy update, konflikt emas. Server yangi revision beradi.
+        revision += 1
     if answer is None:
         answer = StudentAnswer.objects.create(
             attempt=attempt,

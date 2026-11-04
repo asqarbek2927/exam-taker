@@ -301,6 +301,10 @@ Student uchun savol ID — `ExamQuestion` snapshot/delivery ID. Autosave payload
 {"option_ids":["uuid"],"revision":1}
 ```
 
+Variantni almashtirishda (`A` dan `B` ga) oxirgi response qaytargan `revision` yuboriladi;
+backend javobni yangilaydi va yangi revisionni bittaga oshirib qaytaradi. Aynan bir payloadni
+qayta yuborish idempotent, undan eski revision esa `409 Conflict` qaytaradi.
+
 yoki open-ended uchun:
 
 ```json

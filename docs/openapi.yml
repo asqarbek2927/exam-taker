@@ -8992,6 +8992,8 @@ components:
         revision:
           type: integer
           minimum: 0
+          description: Birinchi saqlash uchun 1; keyingi o‘zgarishda oxirgi response
+            qaytargan revision. Backend muvaffaqiyatli o‘zgarishda uni bittaga oshiradi.
       required:
       - option_ids
       - revision

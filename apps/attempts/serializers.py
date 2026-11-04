@@ -21,7 +21,13 @@ from .models import (
 class StudentSavedAnswerSerializer(serializers.Serializer):
     option_ids = serializers.ListField(child=serializers.UUIDField())
     text_answer = serializers.CharField(allow_blank=True)
-    revision = serializers.IntegerField(min_value=0)
+    revision = serializers.IntegerField(
+        min_value=0,
+        help_text=(
+            "Birinchi saqlash uchun 1; keyingi o‘zgarishda oxirgi response qaytargan revision. "
+            "Backend muvaffaqiyatli o‘zgarishda uni bittaga oshiradi."
+        ),
+    )
 
 
 class StudentAttemptOptionSerializer(serializers.ModelSerializer):
