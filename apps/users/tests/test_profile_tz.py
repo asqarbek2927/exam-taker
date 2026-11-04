@@ -25,16 +25,16 @@ PHOTO = "/api/v1/profile/photo"
 PASSWORD = "/api/v1/profile/change-password"
 
 
-def login(client, identifier, password=DEFAULT_PASSWORD):
+def login(client, username, password=DEFAULT_PASSWORD):
     return client.post(
         LOGIN,
-        {"email_or_username": identifier, "password": password},
+        {"username": username, "password": password},
         format="json",
     )
 
 
 def authenticate(client, user):
-    access = login(client, user.email).json()["access_token"]
+    access = login(client, user.username).json()["access_token"]
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
 
 
@@ -48,7 +48,7 @@ def test_login_accepts_username_and_returns_must_change_password(api_client):
     user = TeacherFactory(must_change_password=True)
     response = api_client.post(
         LOGIN,
-        {"emailOrUsername": user.username, "password": DEFAULT_PASSWORD},
+        {"username": user.username, "password": DEFAULT_PASSWORD},
         format="json",
     )
     assert response.status_code == 200
@@ -60,7 +60,7 @@ def test_login_rejects_expired_temporary_password(api_client):
         must_change_password=True,
         temporary_password_expires_at=timezone.now() - timedelta(seconds=1),
     )
-    response = login(api_client, user.email)
+    response = login(api_client, user.username)
     assert response.status_code == 401
     assert "muddati tugagan" in response.json()["message"]
 
@@ -70,7 +70,7 @@ def test_refresh_rejects_expired_temporary_password(api_client):
         must_change_password=True,
         temporary_password_expires_at=timezone.now() + timedelta(seconds=30),
     )
-    refresh = login(api_client, user.email).json()["refresh_token"]
+    refresh = login(api_client, user.username).json()["refresh_token"]
     user.temporary_password_expires_at = timezone.now() - timedelta(seconds=1)
     user.save(update_fields=["temporary_password_expires_at"])
     response = api_client.post("/api/v1/auth/refresh", {"refresh_token": refresh}, format="json")

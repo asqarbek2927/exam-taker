@@ -151,9 +151,35 @@ class ExamActivityItemSerializer(serializers.Serializer):
 class ExamActivitySerializer(serializers.Serializer):
     period_days = serializers.IntegerField()
     items = ExamActivityItemSerializer(many=True)
+    previous_items = ExamActivityItemSerializer(many=True)
     current_total = serializers.IntegerField()
     previous_total = serializers.IntegerField()
     change_percentage = serializers.FloatField(allow_null=True)
+
+
+class ComparisonPeriodSerializer(serializers.Serializer):
+    start_at = serializers.DateTimeField()
+    end_at = serializers.DateTimeField()
+
+
+class CountComparisonSerializer(serializers.Serializer):
+    current_period = serializers.IntegerField()
+    previous_period = serializers.IntegerField()
+    change_percentage = serializers.FloatField(allow_null=True)
+
+
+class ScoreComparisonSerializer(serializers.Serializer):
+    current_period = serializers.FloatField(allow_null=True)
+    previous_period = serializers.FloatField(allow_null=True)
+    change_points = serializers.FloatField(allow_null=True)
+
+
+class DashboardComparisonSerializer(serializers.Serializer):
+    period_days = serializers.IntegerField()
+    current_period = ComparisonPeriodSerializer()
+    previous_period = ComparisonPeriodSerializer()
+    student_registrations = CountComparisonSerializer()
+    average_score = ScoreComparisonSerializer()
 
 
 class ExamStatisticsSerializer(serializers.Serializer):
@@ -181,6 +207,7 @@ class AdminDashboardSerializer(serializers.Serializer):
     total_students = serializers.IntegerField()
     total_teachers = serializers.IntegerField()
     total_courses = serializers.IntegerField()
+    active_courses = serializers.IntegerField()
     total_modules = serializers.IntegerField()
     total_questions = serializers.IntegerField()
     total_exams = serializers.IntegerField()
@@ -194,8 +221,74 @@ class AdminDashboardSerializer(serializers.Serializer):
     recent_exams = RecentExamSerializer(many=True)
     recent_results = RecentResultSerializer(many=True)
     exam_activity = ExamActivitySerializer()
+    comparison = DashboardComparisonSerializer()
     exam_statistics = ExamStatisticsSerializer()
     platform_activity = PlatformActivitySerializer(many=True)
+
+
+class DashboardPersonSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    full_name = serializers.CharField()
+
+
+class DashboardGroupBriefSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+
+
+class TeacherUpcomingExamSerializer(serializers.Serializer):
+    assignment_id = serializers.UUIDField()
+    exam_id = serializers.UUIDField()
+    exam_title = serializers.CharField()
+    course_id = serializers.UUIDField()
+    course_name = serializers.CharField()
+    groups = DashboardGroupBriefSerializer(many=True)
+    start_at = serializers.DateTimeField()
+    duration_minutes = serializers.IntegerField()
+    students_count = serializers.IntegerField()
+    status = serializers.CharField()
+
+
+class ResultActivityItemSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    average_score = serializers.FloatField(allow_null=True)
+    graded_attempts = serializers.IntegerField()
+
+
+class ResultActivitySerializer(serializers.Serializer):
+    period_days = serializers.IntegerField()
+    items = ResultActivityItemSerializer(many=True)
+    previous_items = ResultActivityItemSerializer(many=True)
+
+
+class TeacherCourseCardSerializer(serializers.Serializer):
+    course_id = serializers.UUIDField()
+    course_name = serializers.CharField()
+    groups_count = serializers.IntegerField()
+    students_count = serializers.IntegerField()
+    exams_count = serializers.IntegerField()
+    average_score = serializers.FloatField(allow_null=True)
+
+
+class TeacherRecentResultSerializer(serializers.Serializer):
+    attempt_id = serializers.UUIDField()
+    student_id = serializers.UUIDField()
+    student_name = serializers.CharField()
+    exam_title = serializers.CharField()
+    course_name = serializers.CharField()
+    percentage = serializers.FloatField(allow_null=True)
+    status = serializers.CharField()
+    submitted_at = serializers.DateTimeField()
+
+
+class TeacherGradingQueueSerializer(serializers.Serializer):
+    attempt_id = serializers.UUIDField()
+    student_id = serializers.UUIDField()
+    student_name = serializers.CharField()
+    exam_title = serializers.CharField()
+    course_name = serializers.CharField()
+    pending_answers_count = serializers.IntegerField()
+    submitted_at = serializers.DateTimeField()
 
 
 class TeacherDashboardSerializer(serializers.Serializer):
@@ -207,6 +300,65 @@ class TeacherDashboardSerializer(serializers.Serializer):
     active_assignments = serializers.IntegerField()
     pending_grading = serializers.IntegerField()
     average_student_score = serializers.FloatField(allow_null=True)
+    upcoming_exams = TeacherUpcomingExamSerializer(many=True)
+    result_activity = ResultActivitySerializer()
+    course_cards = TeacherCourseCardSerializer(many=True)
+    recent_results = TeacherRecentResultSerializer(many=True)
+    grading_queue = TeacherGradingQueueSerializer(many=True)
+
+
+class StudentUpcomingExamSerializer(serializers.Serializer):
+    assignment_id = serializers.UUIDField()
+    exam_title = serializers.CharField()
+    course_id = serializers.UUIDField()
+    course_name = serializers.CharField()
+    start_at = serializers.DateTimeField()
+    duration_minutes = serializers.IntegerField()
+    questions_count = serializers.IntegerField()
+    status = serializers.CharField()
+
+
+class StudentNextStepSerializer(serializers.Serializer):
+    assignment_id = serializers.UUIDField()
+    exam_title = serializers.CharField()
+    start_at = serializers.DateTimeField()
+    status = serializers.CharField()
+
+
+class StudentCourseProgressSerializer(serializers.Serializer):
+    course_id = serializers.UUIDField()
+    course_name = serializers.CharField()
+    teacher = DashboardPersonSerializer(allow_null=True)
+    progress_percentage = serializers.FloatField()
+    completed_assignments = serializers.IntegerField()
+    total_assignments = serializers.IntegerField()
+    next_step = StudentNextStepSerializer(allow_null=True)
+
+
+class StudentStudyGroupSerializer(serializers.Serializer):
+    group_id = serializers.UUIDField()
+    group_name = serializers.CharField()
+    course_id = serializers.UUIDField()
+    course_name = serializers.CharField()
+    teachers = DashboardPersonSerializer(many=True)
+    classmates_count = serializers.IntegerField()
+    classmates = DashboardPersonSerializer(many=True)
+
+
+class StudentRecentResultSerializer(serializers.Serializer):
+    attempt_id = serializers.UUIDField()
+    exam_title = serializers.CharField()
+    course_id = serializers.UUIDField()
+    course_name = serializers.CharField()
+    percentage = serializers.FloatField(allow_null=True)
+    status = serializers.CharField()
+    submitted_at = serializers.DateTimeField()
+
+
+class StudentRecentActivitySerializer(serializers.Serializer):
+    type = serializers.CharField()
+    description = serializers.CharField()
+    occurred_at = serializers.DateTimeField()
 
 
 class StudentDashboardSerializer(serializers.Serializer):
@@ -215,3 +367,8 @@ class StudentDashboardSerializer(serializers.Serializer):
     completed_exams = serializers.IntegerField()
     average_score = serializers.FloatField(allow_null=True)
     passed_exams = serializers.IntegerField()
+    upcoming_exams = StudentUpcomingExamSerializer(many=True)
+    course_progress = StudentCourseProgressSerializer(many=True)
+    study_groups = StudentStudyGroupSerializer(many=True)
+    recent_results = StudentRecentResultSerializer(many=True)
+    recent_activity = StudentRecentActivitySerializer(many=True)

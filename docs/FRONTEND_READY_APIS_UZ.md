@@ -51,14 +51,14 @@ qilingan rollar (`SUPER_ADMIN`, `TEACHER`, `SUPPORT_TEACHER`, `STUDENT`) uchun b
 Login request:
 
 ```json
-{"emailOrUsername":"teacher@example.com","password":"StrongPassword1"}
+{"username":"teacher","password":"StrongPassword1"}
 ```
 
 Login response asosiy maydonlari:
 
 ```json
 {
-  "user": {"id":"uuid","full_name":"...","email":"...","role":"TEACHER"},
+  "user": {"id":"uuid","full_name":"...","username":"teacher","email":null,"role":"TEACHER"},
   "access_token":"...",
   "refresh_token":"...",
   "must_change_password":false

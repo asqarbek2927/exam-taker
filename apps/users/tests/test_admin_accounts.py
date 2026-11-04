@@ -39,6 +39,7 @@ ACCOUNTS = "/api/v1/admin/accounts"
 def create_payload(**overrides):
     payload = {
         "full_name": "Madina Karimova",
+        "username": "madina_karimova",
         "email": "madina@example.com",
         "role": "STUDENT",
         "phone_number": "+998901234567",
@@ -76,6 +77,53 @@ def test_create_returns_one_time_credentials_and_audits(auth_client, admin):
     assert user.location == "Tashkent"
     assert user.temporary_password_expires_at > timezone.now() + timedelta(hours=23)
     assert AuditLog.objects.filter(entity_id=user.pk, action=AuditAction.ACCOUNT_CREATED).exists()
+
+
+@pytest.mark.parametrize("role", ["TEACHER", "SUPPORT_TEACHER", "STUDENT"])
+def test_create_account_without_email_uses_required_username(auth_client, admin, role):
+    payload = create_payload(role=role)
+    payload.pop("email")
+
+    response = auth_client(admin).post(ACCOUNTS, payload, format="json")
+
+    assert response.status_code == 201
+    account = response.json()["account"]
+    assert account["email"] is None
+    assert account["username"] == "madina_karimova"
+    assert account["role"] == role
+
+    login = auth_client(admin).post(
+        "/api/v1/auth/login",
+        {
+            "username": account["username"],
+            "password": response.json()["temporary_password"],
+        },
+        format="json",
+    )
+    assert login.status_code == 200
+
+
+def test_create_account_without_username_is_rejected(auth_client, admin):
+    payload = create_payload()
+    payload.pop("username")
+    payload.pop("email")
+
+    response = auth_client(admin).post(ACCOUNTS, payload, format="json")
+
+    assert response.status_code == 422
+    assert "username" in response.json()["errors"]
+
+
+@pytest.mark.parametrize("username", ["", None])
+def test_create_account_rejects_blank_or_null_username(auth_client, admin, username):
+    response = auth_client(admin).post(
+        ACCOUNTS,
+        create_payload(username=username, email=None),
+        format="json",
+    )
+
+    assert response.status_code == 422
+    assert "username" in response.json()["errors"]
 
 
 def test_create_downloads_optional_avatar_url_to_local_storage(
@@ -316,10 +364,16 @@ def test_patch_is_versioned_and_updates_email(auth_client, admin, teacher):
 
     updated = client.patch(
         f"{ACCOUNTS}/{teacher.id}",
-        {"full_name": "Updated Teacher", "location": "Samarkand", "version": 2},
+        {
+            "full_name": "Updated Teacher",
+            "username": "updated_teacher",
+            "location": "Samarkand",
+            "version": 2,
+        },
         format="json",
     )
     assert updated.status_code == 200
+    assert updated.json()["username"] == "updated_teacher"
     assert updated.json()["version"] == 3
 
     conflict = client.patch(
@@ -414,12 +468,34 @@ def test_patch_rejects_duplicate_email(auth_client, admin, teacher):
     assert "email" in response.json()["errors"]
 
 
+def test_create_and_patch_reject_duplicate_username_case_insensitively(
+    auth_client, admin, teacher
+):
+    client = auth_client(admin)
+    create = client.post(
+        ACCOUNTS,
+        create_payload(username=teacher.username.upper(), email="another@example.com"),
+        format="json",
+    )
+    assert create.status_code == 422
+    assert "username" in create.json()["errors"]
+
+    existing = TeacherFactory()
+    update = client.patch(
+        f"{ACCOUNTS}/{teacher.id}",
+        {"username": existing.username.upper(), "version": teacher.version},
+        format="json",
+    )
+    assert update.status_code == 422
+    assert "username" in update.json()["errors"]
+
+
 def test_status_change_revokes_sessions_and_deleted_cannot_restore(
     api_client, auth_client, admin, teacher
 ):
     login = api_client.post(
         "/api/v1/auth/login",
-        {"email": teacher.email, "password": DEFAULT_PASSWORD},
+        {"username": teacher.username, "password": DEFAULT_PASSWORD},
         format="json",
     ).json()
     response = auth_client(admin).put(
@@ -454,7 +530,7 @@ def test_soft_delete_preserves_history_and_blocks_login(api_client, auth_client,
     assert (
         api_client.post(
             "/api/v1/auth/login",
-            {"email": student.email, "password": DEFAULT_PASSWORD},
+            {"username": student.username, "password": DEFAULT_PASSWORD},
             format="json",
         ).status_code
         == 401
@@ -494,7 +570,7 @@ def test_temporary_password_is_one_time_response_and_revokes_old_session(
 ):
     tokens = api_client.post(
         "/api/v1/auth/login",
-        {"email": teacher.email, "password": DEFAULT_PASSWORD},
+        {"username": teacher.username, "password": DEFAULT_PASSWORD},
         format="json",
     ).json()
     response = auth_client(admin).post(f"{ACCOUNTS}/{teacher.id}/temporary-password")

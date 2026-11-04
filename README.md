@@ -33,7 +33,7 @@ python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 # .env dagi SECRET_KEY ni almashtiring
 python manage.py migrate
-python manage.py createsuperuser   # email, full_name, parol -> role=SUPER_ADMIN
+python manage.py createsuperuser   # username, full_name, parol -> role=SUPER_ADMIN; email optional
 python manage.py runserver
 ```
 
@@ -103,7 +103,7 @@ To‘liq sxema: `/api/docs` (Swagger) yoki `/api/schema` (OpenAPI).
 ```bash
 # login
 curl -X POST localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' \
-  -d '{"email":"boss@example.com","password":"..."}'
+  -d '{"username":"boss","password":"..."}'
 # -> {"user": {...}, "access_token": "...", "refresh_token": "..."}
 
 # himoyalangan endpoint
@@ -139,7 +139,7 @@ Validation xatosi — **422**:
 * `User.status` — yagona haqiqat manbai; `is_active` shundan hisoblanadi. Nofaol qilinganda (`deactivate`)
   yoki parol almashtirilganda userning barcha refresh tokenlari blacklist qilinadi.
 * **Himoya 2 qatlamli:** `get_queryset()` scoping (ko‘rinmasa 404) + permission class (403).
-* **Login throttling** (IP + email) bo‘yicha: bir NAT IP dan ko‘p student kirsa bir-birini bloklamaydi.
+* **Login throttling** (IP + username) bo‘yicha: bir NAT IP dan ko‘p student kirsa bir-birini bloklamaydi.
   Cache — `DatabaseCache` (prod, Redis yo‘q; `createcachetable` entrypoint da). Nginx orqasida `NUM_PROXIES=1`.
 * Kurs `ARCHIVED` bo‘lsa unga teacher/student biriktirib bo‘lmaydi, tahrirlab bo‘lmaydi.
 * Enrollment o‘chirilmaydi: `DELETE` → `REMOVED` (idempotent); qayta yozilsa mavjud yozuv `ACTIVE` ga qaytadi.
@@ -227,7 +227,7 @@ DATABASE_URL=postgres://<user>:<password>@localhost:5432/<database> \
   DJANGO_SETTINGS_MODULE=config.settings.test pytest --create-db
 ```
 
-566 ta test: auth, users, permission matritsasi, queryset scoping,
+571 ta test: auth, users, permission matritsasi, queryset scoping,
 academics, savol validatsiyasi, imtihon CRUD, edit-lock, assignment (status/transition/audience/eligibility),
 attempt (start/autosave/submit/grading/expiry/leakage), DB constraintlar, race condition, OpenAPI.
 

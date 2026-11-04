@@ -18,13 +18,11 @@ PROFILE = "/api/v1/profile"
 
 
 def login(client, user, password=DEFAULT_PASSWORD):
-    return client.post(
-        LOGIN, {"email_or_username": user.email, "password": password}, format="json"
-    )
+    return client.post(LOGIN, {"username": user.username, "password": password}, format="json")
 
 
 def test_login_request_contract_has_one_identifier_field():
-    assert set(LoginSerializer().fields) == {"emailOrUsername", "password"}
+    assert set(LoginSerializer().fields) == {"username", "password"}
 
 
 def test_common_password_validator_is_disabled():
@@ -56,15 +54,16 @@ def test_login_success_returns_user_and_tokens(api_client, teacher):
     assert body["user"] == {
         "id": str(teacher.id),
         "full_name": teacher.full_name,
+        "username": teacher.username,
         "email": teacher.email,
         "role": "TEACHER",
     }
     assert body["access_token"] and body["refresh_token"]
 
 
-def test_login_email_is_case_insensitive(api_client, teacher):
+def test_login_username_is_case_insensitive(api_client, teacher):
     response = api_client.post(
-        LOGIN, {"email": teacher.email.upper(), "password": DEFAULT_PASSWORD}, format="json"
+        LOGIN, {"username": teacher.username.upper(), "password": DEFAULT_PASSWORD}, format="json"
     )
     assert response.status_code == 200
 
@@ -75,7 +74,7 @@ def test_login_wrong_password_returns_401_in_error_format(api_client, teacher):
     assert response.json() == {
         "status_code": 401,
         "error": "Unauthorized",
-        "message": "Email yoki parol noto‘g‘ri, yoki akkaunt faol emas.",
+        "message": "Username yoki parol noto‘g‘ri, yoki akkaunt faol emas.",
     }
 
 
@@ -89,7 +88,7 @@ def test_login_missing_fields_returns_422(api_client):
     assert response.status_code == 422
     body = response.json()
     assert body["message"] == "Validation failed"
-    assert set(body["errors"]) == {"emailOrUsername", "password"}
+    assert set(body["errors"]) == {"username", "password"}
 
 
 def test_login_is_throttled_per_ip_and_email(api_client, teacher, monkeypatch):
@@ -114,7 +113,7 @@ def test_login_ip_throttle_blocks_mass_attempts(api_client, monkeypatch):
     monkeypatch.setitem(SimpleRateThrottle.THROTTLE_RATES, "login_ip", "3/min")
     codes = [
         api_client.post(
-            LOGIN, {"email": f"nobody{i}@example.com", "password": "x"}, format="json"
+            LOGIN, {"username": f"nobody{i}", "password": "x"}, format="json"
         ).status_code
         for i in range(5)
     ]

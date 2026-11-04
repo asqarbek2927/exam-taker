@@ -58,10 +58,10 @@ Qisqartirish uchun: `B=http://localhost:8000/api/v1`, `login` funksiyasi:
 ```bash
 B=http://localhost:8000/api/v1
 login() { curl -s -X POST $B/auth/login -H 'Content-Type: application/json' \
-  -d "{\"emailOrUsername\":\"$1\",\"password\":\"Demo-Pass-123!\"}" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])"; }
-SH="Authorization: Bearer $(login student3@examtaker.local)"   # student
-TH="Authorization: Bearer $(login teacher1@examtaker.local)"   # teacher
-AH="Authorization: Bearer $(login admin@examtaker.local)"      # admin
+  -d "{\"username\":\"$1\",\"password\":\"Demo-Pass-123!\"}" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])"; }
+SH="Authorization: Bearer $(login student3)"   # student
+TH="Authorization: Bearer $(login teacher1)"   # teacher
+AH="Authorization: Bearer $(login admin)"      # admin
 ```
 
 ### 1–2. Auth, Users, Academics (Super Admin)
@@ -259,7 +259,7 @@ endpointlari backward compatibility uchun saqlangan.
 ## 5. Avtomatik testlar
 
 ```bash
-make test        # PostgreSQL: 566 passed
+make test        # PostgreSQL: 571 passed
 make lint
 make schema      # OpenAPI validatsiyasi
 ```

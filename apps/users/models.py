@@ -10,7 +10,7 @@ from .managers import UserManager
 
 class User(UUIDModel, TimeStampedModel, VersionedModel, AbstractBaseUser, PermissionsMixin):
     full_name = models.CharField(max_length=255)
-    email = models.EmailField(unique=True)
+    email = models.EmailField(unique=True, null=True, blank=True)
     username = models.CharField(max_length=150, unique=True)
     role = models.CharField(max_length=20, choices=UserRole.choices, db_index=True)
     avatar_url = models.URLField(max_length=500, blank=True)
@@ -30,7 +30,7 @@ class User(UUIDModel, TimeStampedModel, VersionedModel, AbstractBaseUser, Permis
 
     objects = UserManager()
 
-    USERNAME_FIELD = "email"
+    USERNAME_FIELD = "username"
     REQUIRED_FIELDS = ["full_name"]
 
     class Meta:
@@ -38,7 +38,7 @@ class User(UUIDModel, TimeStampedModel, VersionedModel, AbstractBaseUser, Permis
         ordering = ["full_name", "email"]
 
     def __str__(self) -> str:
-        return f"{self.full_name} <{self.email}>"
+        return f"{self.full_name} <{self.email or self.username}>"
 
     # `status` — yagona haqiqat manbai. Django/SimpleJWT `is_active` ni tekshiradi.
     @property
@@ -51,10 +51,13 @@ class User(UUIDModel, TimeStampedModel, VersionedModel, AbstractBaseUser, Permis
         return self.role == UserRole.SUPER_ADMIN
 
     def save(self, *args, **kwargs):
-        self.email = self.email.strip().lower()
+        self.username = self.username.strip().lower() if self.username else None
+        self.email = self.email.strip().lower() if self.email else None
         # Django permission tizimi (admin panel) uchun role bilan sinxron.
         self.is_superuser = self.role == UserRole.SUPER_ADMIN
         update_fields = kwargs.get("update_fields")
-        if update_fields is not None and ("role" in update_fields or "email" in update_fields):
-            kwargs["update_fields"] = set(update_fields) | {"is_superuser", "email"}
+        if update_fields is not None and (
+            "role" in update_fields or "email" in update_fields or "username" in update_fields
+        ):
+            kwargs["update_fields"] = set(update_fields) | {"is_superuser", "email", "username"}
         super().save(*args, **kwargs)

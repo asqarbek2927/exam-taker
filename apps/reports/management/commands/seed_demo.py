@@ -115,14 +115,29 @@ class Command(BaseCommand):
     def _build(self, password: str) -> dict:
         now = timezone.now()
         admin = User.objects.create_superuser(
-            email=ADMIN_EMAIL, password=password, full_name="Demo Admin"
+            username=ADMIN_EMAIL.split("@", 1)[0],
+            email=ADMIN_EMAIL,
+            password=password,
+            full_name="Demo Admin",
         )
         t1, t2 = (
-            User.objects.create_user(email=e, password=password, full_name=n, role="TEACHER")
+            User.objects.create_user(
+                username=e.split("@", 1)[0],
+                email=e,
+                password=password,
+                full_name=n,
+                role="TEACHER",
+            )
             for e, n in TEACHERS
         )
         s1, s2, s3, s4, s5, s6 = (
-            User.objects.create_user(email=e, password=password, full_name=n, role="STUDENT")
+            User.objects.create_user(
+                username=e.split("@", 1)[0],
+                email=e,
+                password=password,
+                full_name=n,
+                role="STUDENT",
+            )
             for e, n in STUDENTS
         )
 

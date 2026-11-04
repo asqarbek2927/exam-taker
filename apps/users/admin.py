@@ -17,7 +17,7 @@ class HttpsURLField(forms.URLField):
 class UserAdminCreationForm(BaseUserCreationForm):
     class Meta:
         model = User
-        fields = ("email", "full_name", "role")
+        fields = ("username", "email", "full_name", "role")
 
 
 class UserAdminChangeForm(UserChangeForm):
@@ -31,14 +31,14 @@ class UserAdminChangeForm(UserChangeForm):
 class UserAdmin(DjangoUserAdmin):
     form = UserAdminChangeForm
     add_form = UserAdminCreationForm
-    list_display = ("email", "full_name", "role", "status", "created_at")
+    list_display = ("username", "email", "full_name", "role", "status", "created_at")
     list_filter = ("role", "status")
-    search_fields = ("email", "full_name")
-    ordering = ("email",)
+    search_fields = ("username", "email", "full_name")
+    ordering = ("username",)
     readonly_fields = ("id", "last_login", "created_at", "updated_at")
 
     fieldsets = (
-        (None, {"fields": ("id", "email", "password")}),
+        (None, {"fields": ("id", "username", "email", "password")}),
         ("Profil", {"fields": ("full_name", "avatar_url")}),
         ("Rol va holat", {"fields": ("role", "status")}),
         ("Sanalar", {"fields": ("last_login", "created_at", "updated_at")}),
@@ -48,7 +48,7 @@ class UserAdmin(DjangoUserAdmin):
             None,
             {
                 "classes": ("wide",),
-                "fields": ("email", "full_name", "role", "password1", "password2"),
+                "fields": ("username", "email", "full_name", "role", "password1", "password2"),
             },
         ),
     )

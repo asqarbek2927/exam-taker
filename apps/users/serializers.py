@@ -43,7 +43,7 @@ def validate_password_strength(value: str, user: User | None = None) -> str:
 class UserBriefSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "full_name", "email", "role"]
+        fields = ["id", "full_name", "username", "email", "role"]
         read_only_fields = fields
 
 
@@ -399,7 +399,14 @@ class AdminAccountDetailSerializer(AdminAccountSerializer):
 
 class AdminAccountCreateSerializer(serializers.Serializer):
     full_name = serializers.CharField(max_length=255)
-    email = serializers.EmailField(max_length=254)
+    username = serializers.CharField(max_length=150)
+    email = serializers.EmailField(
+        max_length=254,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        default=None,
+    )
     role = serializers.ChoiceField(choices=CreatableUserRole.choices)
     avatar_url = serializers.URLField(required=False, allow_blank=True, write_only=True, default="")
     phone_number = serializers.RegexField(
@@ -407,7 +414,17 @@ class AdminAccountCreateSerializer(serializers.Serializer):
     )
     location = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
 
-    def validate_email(self, value: str) -> str:
+    def validate_username(self, value: str) -> str:
+        value = value.strip().lower()
+        if not value:
+            raise serializers.ValidationError("Username majburiy.")
+        if User.objects.filter(username__iexact=value).exists():
+            raise serializers.ValidationError("Bu username allaqachon band.")
+        return value
+
+    def validate_email(self, value: str | None) -> str | None:
+        if not value:
+            return None
         value = value.strip().lower()
         if User.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError("Bu email allaqachon ro‘yxatdan o‘tgan.")
@@ -435,13 +452,30 @@ class AdminAccountCreateResponseSerializer(serializers.Serializer):
 
 class AdminAccountUpdateSerializer(serializers.Serializer):
     full_name = serializers.CharField(max_length=255, required=False)
-    email = serializers.EmailField(max_length=254, required=False)
+    username = serializers.CharField(max_length=150, required=False)
+    email = serializers.EmailField(
+        max_length=254, required=False, allow_blank=True, allow_null=True
+    )
     avatar = serializers.ImageField(required=False, write_only=True)
     phone_number = serializers.RegexField(regex=r"^\+998\d{9}$", required=False, allow_blank=True)
     location = serializers.CharField(max_length=255, required=False, allow_blank=True)
     version = serializers.IntegerField(min_value=1)
 
-    def validate_email(self, value: str) -> str:
+    def validate_username(self, value: str) -> str:
+        value = value.strip().lower()
+        if not value:
+            raise serializers.ValidationError("Username majburiy.")
+        queryset = User.objects.filter(username__iexact=value)
+        user = self.context.get("user")
+        if user is not None:
+            queryset = queryset.exclude(pk=user.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Bu username allaqachon band.")
+        return value
+
+    def validate_email(self, value: str | None) -> str | None:
+        if not value:
+            return None
         value = value.strip().lower()
         queryset = User.objects.filter(email__iexact=value)
         user = self.context.get("user")
@@ -599,40 +633,23 @@ class ChangeOwnPasswordSerializer(serializers.Serializer):
 # Auth
 # --------------------------------------------------------------------------
 class LoginSerializer(serializers.Serializer):
-    emailOrUsername = serializers.CharField(
-        trim_whitespace=True,
-        write_only=True,
-        help_text=(
-            "Email yoki username. `email` va `email_or_username` legacy aliaslari ham "
-            "qabul qilinadi."
-        ),
-    )
+    username = serializers.CharField(trim_whitespace=True, write_only=True)
     password = serializers.CharField(write_only=True, trim_whitespace=False)
 
     default_error_messages = {
-        "no_active_account": "Email yoki parol noto‘g‘ri, yoki akkaunt faol emas.",
+        "no_active_account": "Username yoki parol noto‘g‘ri, yoki akkaunt faol emas.",
     }
 
-    def to_internal_value(self, data):
-        """Legacy login kalitlarini OpenAPI'da ko'rsatmasdan canonical nomga o'tkazadi."""
-        normalized = data.copy()
-        legacy_identifier = data.get("email_or_username") or data.get("email")
-        if not normalized.get("emailOrUsername") and legacy_identifier:
-            normalized["emailOrUsername"] = legacy_identifier
-        return super().to_internal_value(normalized)
-
     def validate(self, attrs):
-        identifier = (attrs.get("emailOrUsername") or "").strip()
+        username = (attrs.get("username") or "").strip()
         errors = {}
-        if not identifier:
-            errors["emailOrUsername"] = ["Email yoki username kiriting."]
+        if not username:
+            errors["username"] = ["Username kiriting."]
         if not attrs.get("password"):
             errors["password"] = ["Password kiriting."]
         if errors:
             raise serializers.ValidationError(errors)
-        user = User.objects.filter(email__iexact=identifier).first()
-        if user is None:
-            user = User.objects.filter(username__iexact=identifier).first()
+        user = User.objects.filter(username__iexact=username).first()
         if user is None or not user.is_active or not user.check_password(attrs["password"]):
             raise AuthenticationFailed(self.error_messages["no_active_account"])
         if (

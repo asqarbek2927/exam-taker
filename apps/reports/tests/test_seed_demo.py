@@ -20,9 +20,11 @@ def seed(*args) -> str:
     return out.getvalue()
 
 
-def login(client, email):
+def login(client, username):
     response = client.post(
-        "/api/v1/auth/login", {"email": email, "password": DEFAULT_PASSWORD}, format="json"
+        "/api/v1/auth/login",
+        {"username": username, "password": DEFAULT_PASSWORD},
+        format="json",
     )
     assert response.status_code == 200, response.json()
     return {"HTTP_AUTHORIZATION": f"Bearer {response.json()['access_token']}"}
@@ -62,10 +64,10 @@ def test_seed_is_idempotent():
 
 def test_demo_users_can_use_the_api_end_to_end(api_client):
     seed("--allow-production")
-    admin = login(api_client, ADMIN_EMAIL)
-    teacher = login(api_client, "teacher1@examtaker.local")
-    student3 = login(api_client, "student3@examtaker.local")
-    student2 = login(api_client, "student2@examtaker.local")
+    admin = login(api_client, ADMIN_EMAIL.split("@", 1)[0])
+    teacher = login(api_client, "teacher1")
+    student3 = login(api_client, "student3")
+    student2 = login(api_client, "student2")
 
     # Teacher: 1 ta attempt qo‘lda baholashni kutmoqda.
     pending = api_client.get("/api/v1/grading/pending", **teacher).json()["data"]

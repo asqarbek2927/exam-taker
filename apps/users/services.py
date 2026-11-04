@@ -23,6 +23,7 @@ from .choices import EDUCATOR_ROLES, UserRole, UserStatus
 from .models import User
 
 EMAIL_TAKEN = "Bu email allaqachon ro‘yxatdan o‘tgan."
+USERNAME_TAKEN = "Bu username allaqachon band."
 PASSWORD_LENGTH = 16
 PASSWORD_LOWERCASE = "abcdefghijkmnopqrstuvwxyz"
 PASSWORD_UPPERCASE = "ABCDEFGHJKLMNPQRSTUVWXYZ"
@@ -152,7 +153,8 @@ def revoke_all_tokens(user: User) -> None:
 def create_user(
     *,
     full_name: str,
-    email: str,
+    username: str,
+    email: str | None = None,
     role: str,
     password: str | None = None,
     avatar_url: str | None = "",
@@ -163,13 +165,14 @@ def create_user(
         raise BusinessRuleError("Faqat educator yoki STUDENT yaratish mumkin.")
     generated_password = None
     if password is None:
-        probe = User(full_name=full_name, email=email, role=role)
+        probe = User(full_name=full_name, username=username, email=email or None, role=role)
         generated_password = _generate_valid_password(probe)
         password = generated_password
     try:
         with transaction.atomic():
             user = User.objects.create_user(
-                email=email,
+                username=username,
+                email=email or None,
                 password=password,
                 full_name=full_name,
                 role=role,
@@ -183,6 +186,8 @@ def create_user(
             )
             return user, generated_password
     except IntegrityError as exc:
+        if username and User.objects.filter(username__iexact=username).exists():
+            raise ConflictError(USERNAME_TAKEN) from exc
         raise ConflictError(EMAIL_TAKEN) from exc
 
 
@@ -294,7 +299,7 @@ def update_admin_account(*, user: User, actor, expected_version: int, **fields) 
     changed = [
         name
         for name in fields
-        if name in {"full_name", "email", "avatar", "phone_number", "location"}
+        if name in {"full_name", "username", "email", "avatar", "phone_number", "location"}
     ]
     if not changed:
         return user
@@ -308,7 +313,15 @@ def update_admin_account(*, user: User, actor, expected_version: int, **fields) 
     update_fields = [*changed, "version", "updated_at"]
     if "avatar" in changed:
         update_fields.append("avatar_url")
-    user.save(update_fields=update_fields)
+    try:
+        with transaction.atomic():
+            user.save(update_fields=update_fields)
+    except IntegrityError as exc:
+        if "username" in changed and User.objects.filter(
+            username__iexact=user.username
+        ).exclude(pk=user.pk).exists():
+            raise ConflictError(USERNAME_TAKEN) from exc
+        raise ConflictError(EMAIL_TAKEN) from exc
     if "avatar" in changed and old_avatar_name and old_avatar_name != user.avatar.name:
         transaction.on_commit(lambda: _delete_stored_file(avatar_storage, old_avatar_name))
     _record_account_audit(

@@ -12,6 +12,7 @@ class UserFactory(DjangoModelFactory):
         model = User
 
     full_name = factory.Faker("name")
+    username = factory.Sequence(lambda n: f"user{n}")
     email = factory.Sequence(lambda n: f"user{n}@example.com")
     password = DEFAULT_PASSWORD
     role = UserRole.TEACHER

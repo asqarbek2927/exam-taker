@@ -4063,6 +4063,7 @@ components:
           type: string
           format: email
           readOnly: true
+          nullable: true
         role:
           allOf:
           - $ref: '#/components/schemas/UserRoleEnum'
@@ -4133,11 +4134,18 @@ components:
           type: string
           minLength: 1
           maxLength: 255
-        email:
+        username:
           type: string
-          format: email
           minLength: 1
-          maxLength: 254
+          maxLength: 150
+        email:
+          nullable: true
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
         role:
           $ref: '#/components/schemas/CreatableUserRoleEnum'
         avatar_url:
@@ -4160,9 +4168,9 @@ components:
           default: ''
           maxLength: 255
       required:
-      - email
       - full_name
       - role
+      - username
     AdminAccountCreateResponse:
       type: object
       properties:
@@ -4194,6 +4202,7 @@ components:
           type: string
           format: email
           readOnly: true
+          nullable: true
         role:
           allOf:
           - $ref: '#/components/schemas/UserRoleEnum'
@@ -4328,11 +4337,18 @@ components:
           type: string
           minLength: 1
           maxLength: 255
-        email:
+        username:
           type: string
-          format: email
           minLength: 1
-          maxLength: 254
+          maxLength: 150
+        email:
+          nullable: true
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
         avatar:
           type: string
           format: binary
@@ -4373,6 +4389,8 @@ components:
           type: integer
         total_courses:
           type: integer
+        active_courses:
+          type: integer
         total_modules:
           type: integer
         total_questions:
@@ -4409,6 +4427,8 @@ components:
             $ref: '#/components/schemas/RecentResult'
         exam_activity:
           $ref: '#/components/schemas/ExamActivity'
+        comparison:
+          $ref: '#/components/schemas/DashboardComparison'
         exam_statistics:
           $ref: '#/components/schemas/ExamStatistics'
         platform_activity:
@@ -4417,7 +4437,9 @@ components:
             $ref: '#/components/schemas/PlatformActivity'
       required:
       - active_assignments
+      - active_courses
       - average_score
+      - comparison
       - completed_assignments
       - course_overview
       - exam_activity
@@ -5415,6 +5437,33 @@ components:
       required:
       - current_password
       - new_password
+    ComparisonPeriod:
+      type: object
+      properties:
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+      required:
+      - end_at
+      - start_at
+    CountComparison:
+      type: object
+      properties:
+        current_period:
+          type: integer
+        previous_period:
+          type: integer
+        change_percentage:
+          type: number
+          format: double
+          nullable: true
+      required:
+      - change_percentage
+      - current_period
+      - previous_period
     CourseBrief:
       type: object
       properties:
@@ -5761,6 +5810,7 @@ components:
           type: string
           format: email
           readOnly: true
+          nullable: true
         username:
           type: string
           readOnly: true
@@ -5807,6 +5857,47 @@ components:
       - status
       - updated_at
       - username
+    DashboardComparison:
+      type: object
+      properties:
+        period_days:
+          type: integer
+        current_period:
+          $ref: '#/components/schemas/ComparisonPeriod'
+        previous_period:
+          $ref: '#/components/schemas/ComparisonPeriod'
+        student_registrations:
+          $ref: '#/components/schemas/CountComparison'
+        average_score:
+          $ref: '#/components/schemas/ScoreComparison'
+      required:
+      - average_score
+      - current_period
+      - period_days
+      - previous_period
+      - student_registrations
+    DashboardGroupBrief:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required:
+      - id
+      - name
+    DashboardPerson:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+      required:
+      - full_name
+      - id
     DashboardSummary:
       type: object
       properties:
@@ -5940,6 +6031,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ExamActivityItem'
+        previous_items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExamActivityItem'
         current_total:
           type: integer
         previous_total:
@@ -5953,6 +6048,7 @@ components:
       - current_total
       - items
       - period_days
+      - previous_items
       - previous_total
     ExamActivityItem:
       type: object
@@ -6703,19 +6799,17 @@ components:
     LoginRequest:
       type: object
       properties:
-        emailOrUsername:
+        username:
           type: string
           writeOnly: true
           minLength: 1
-          description: Email yoki username. `email` va `email_or_username` legacy
-            aliaslari ham qabul qilinadi.
         password:
           type: string
           writeOnly: true
           minLength: 1
       required:
-      - emailOrUsername
       - password
+      - username
     LoginResponse:
       type: object
       description: Faqat OpenAPI sxemasi uchun.
@@ -7365,11 +7459,18 @@ components:
           type: string
           minLength: 1
           maxLength: 255
-        email:
+        username:
           type: string
-          format: email
           minLength: 1
-          maxLength: 254
+          maxLength: 150
+        email:
+          nullable: true
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
         avatar:
           type: string
           format: binary
@@ -8231,6 +8332,39 @@ components:
       - student
       - student_avatar_url
       - submitted_at
+    ResultActivity:
+      type: object
+      properties:
+        period_days:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResultActivityItem'
+        previous_items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResultActivityItem'
+      required:
+      - items
+      - period_days
+      - previous_items
+    ResultActivityItem:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        average_score:
+          type: number
+          format: double
+          nullable: true
+        graded_attempts:
+          type: integer
+      required:
+      - average_score
+      - date
+      - graded_attempts
     ResultGroup:
       type: object
       properties:
@@ -8308,6 +8442,25 @@ components:
         version:
           type: integer
           minimum: 1
+    ScoreComparison:
+      type: object
+      properties:
+        current_period:
+          type: number
+          format: double
+          nullable: true
+        previous_period:
+          type: number
+          format: double
+          nullable: true
+        change_points:
+          type: number
+          format: double
+          nullable: true
+      required:
+      - change_points
+      - current_period
+      - previous_period
     StaffAnswer:
       type: object
       properties:
@@ -8488,6 +8641,37 @@ components:
       - course_name
       - enrollment_id
       - status
+    StudentCourseProgress:
+      type: object
+      properties:
+        course_id:
+          type: string
+          format: uuid
+        course_name:
+          type: string
+        teacher:
+          allOf:
+          - $ref: '#/components/schemas/DashboardPerson'
+          nullable: true
+        progress_percentage:
+          type: number
+          format: double
+        completed_assignments:
+          type: integer
+        total_assignments:
+          type: integer
+        next_step:
+          allOf:
+          - $ref: '#/components/schemas/StudentNextStep'
+          nullable: true
+      required:
+      - completed_assignments
+      - course_id
+      - course_name
+      - next_step
+      - progress_percentage
+      - teacher
+      - total_assignments
     StudentDashboard:
       type: object
       properties:
@@ -8503,12 +8687,37 @@ components:
           nullable: true
         passed_exams:
           type: integer
+        upcoming_exams:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentUpcomingExam'
+        course_progress:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentCourseProgress'
+        study_groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentStudyGroup'
+        recent_results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentRecentResult'
+        recent_activity:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentRecentActivity'
       required:
       - available_exams
       - average_score
       - completed_exams
+      - course_progress
       - my_courses
       - passed_exams
+      - recent_activity
+      - recent_results
+      - study_groups
+      - upcoming_exams
     StudentDirectory:
       type: object
       properties:
@@ -8523,6 +8732,7 @@ components:
           type: string
           format: email
           readOnly: true
+          nullable: true
         username:
           type: string
           readOnly: true
@@ -8651,6 +8861,68 @@ components:
       - question_id
       - text
       - type
+    StudentNextStep:
+      type: object
+      properties:
+        assignment_id:
+          type: string
+          format: uuid
+        exam_title:
+          type: string
+        start_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+      required:
+      - assignment_id
+      - exam_title
+      - start_at
+      - status
+    StudentRecentActivity:
+      type: object
+      properties:
+        type:
+          type: string
+        description:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+      required:
+      - description
+      - occurred_at
+      - type
+    StudentRecentResult:
+      type: object
+      properties:
+        attempt_id:
+          type: string
+          format: uuid
+        exam_title:
+          type: string
+        course_id:
+          type: string
+          format: uuid
+        course_name:
+          type: string
+        percentage:
+          type: number
+          format: double
+          nullable: true
+        status:
+          type: string
+        submitted_at:
+          type: string
+          format: date-time
+      required:
+      - attempt_id
+      - course_id
+      - course_name
+      - exam_title
+      - percentage
+      - status
+      - submitted_at
     StudentResultAnswer:
       type: object
       properties:
@@ -8723,6 +8995,68 @@ components:
       - option_ids
       - revision
       - text_answer
+    StudentStudyGroup:
+      type: object
+      properties:
+        group_id:
+          type: string
+          format: uuid
+        group_name:
+          type: string
+        course_id:
+          type: string
+          format: uuid
+        course_name:
+          type: string
+        teachers:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardPerson'
+        classmates_count:
+          type: integer
+        classmates:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardPerson'
+      required:
+      - classmates
+      - classmates_count
+      - course_id
+      - course_name
+      - group_id
+      - group_name
+      - teachers
+    StudentUpcomingExam:
+      type: object
+      properties:
+        assignment_id:
+          type: string
+          format: uuid
+        exam_title:
+          type: string
+        course_id:
+          type: string
+          format: uuid
+        course_name:
+          type: string
+        start_at:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+        questions_count:
+          type: integer
+        status:
+          type: string
+      required:
+      - assignment_id
+      - course_id
+      - course_name
+      - duration_minutes
+      - exam_title
+      - questions_count
+      - start_at
+      - status
     TeacherCourse:
       type: object
       properties:
@@ -8740,6 +9074,31 @@ components:
       - id
       - name
       - teacher_type
+    TeacherCourseCard:
+      type: object
+      properties:
+        course_id:
+          type: string
+          format: uuid
+        course_name:
+          type: string
+        groups_count:
+          type: integer
+        students_count:
+          type: integer
+        exams_count:
+          type: integer
+        average_score:
+          type: number
+          format: double
+          nullable: true
+      required:
+      - average_score
+      - course_id
+      - course_name
+      - exams_count
+      - groups_count
+      - students_count
     TeacherDashboard:
       type: object
       properties:
@@ -8761,15 +9120,38 @@ components:
           type: number
           format: double
           nullable: true
+        upcoming_exams:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherUpcomingExam'
+        result_activity:
+          $ref: '#/components/schemas/ResultActivity'
+        course_cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherCourseCard'
+        recent_results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherRecentResult'
+        grading_queue:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherGradingQueue'
       required:
       - active_assignments
       - average_student_score
+      - course_cards
+      - grading_queue
       - my_courses
       - my_exams
       - my_groups
       - my_questions
       - my_students
       - pending_grading
+      - recent_results
+      - result_activity
+      - upcoming_exams
     TeacherDirectory:
       type: object
       properties:
@@ -8784,6 +9166,7 @@ components:
           type: string
           format: email
           readOnly: true
+          nullable: true
         username:
           type: string
           readOnly: true
@@ -8853,6 +9236,107 @@ components:
       - inactive_teachers
       - students_taught
       - total_teachers
+    TeacherGradingQueue:
+      type: object
+      properties:
+        attempt_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        student_name:
+          type: string
+        exam_title:
+          type: string
+        course_name:
+          type: string
+        pending_answers_count:
+          type: integer
+        submitted_at:
+          type: string
+          format: date-time
+      required:
+      - attempt_id
+      - course_name
+      - exam_title
+      - pending_answers_count
+      - student_id
+      - student_name
+      - submitted_at
+    TeacherRecentResult:
+      type: object
+      properties:
+        attempt_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        student_name:
+          type: string
+        exam_title:
+          type: string
+        course_name:
+          type: string
+        percentage:
+          type: number
+          format: double
+          nullable: true
+        status:
+          type: string
+        submitted_at:
+          type: string
+          format: date-time
+      required:
+      - attempt_id
+      - course_name
+      - exam_title
+      - percentage
+      - status
+      - student_id
+      - student_name
+      - submitted_at
+    TeacherUpcomingExam:
+      type: object
+      properties:
+        assignment_id:
+          type: string
+          format: uuid
+        exam_id:
+          type: string
+          format: uuid
+        exam_title:
+          type: string
+        course_id:
+          type: string
+          format: uuid
+        course_name:
+          type: string
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardGroupBrief'
+        start_at:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+        students_count:
+          type: integer
+        status:
+          type: string
+      required:
+      - assignment_id
+      - course_id
+      - course_name
+      - duration_minutes
+      - exam_id
+      - exam_title
+      - groups
+      - start_at
+      - status
+      - students_count
     TeachingCoursesUpdateRequest:
       type: object
       properties:
@@ -8907,10 +9391,14 @@ components:
         full_name:
           type: string
           readOnly: true
+        username:
+          type: string
+          readOnly: true
         email:
           type: string
           format: email
           readOnly: true
+          nullable: true
         role:
           allOf:
           - $ref: '#/components/schemas/UserRoleEnum'
@@ -8920,6 +9408,7 @@ components:
       - full_name
       - id
       - role
+      - username
     UserRoleEnum:
       enum:
       - SUPER_ADMIN

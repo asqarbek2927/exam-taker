@@ -8,6 +8,7 @@ from apps.academics.tests.factories import (
     CourseFactory,
     CourseTeacherFactory,
     EnrollmentFactory,
+    GroupStudentFactory,
     ModuleFactory,
     StudyGroupFactory,
 )
@@ -20,6 +21,7 @@ from apps.exams.choices import ExamStatus
 from apps.exams.tests.factories import ExamFactory, ExamQuestionFactory
 from apps.questions.choices import QuestionStatus, QuestionType
 from apps.questions.tests.factories import QuestionFactory
+from apps.reports import selectors
 from apps.users.choices import UserStatus
 from apps.users.tests.factories import StudentFactory, TeacherFactory
 
@@ -61,12 +63,14 @@ def test_empty_state_returns_zeros_and_nulls(auth_client, admin, teacher, studen
     recent_exams = admin_body.pop("recent_exams")
     recent_results = admin_body.pop("recent_results")
     activity = admin_body.pop("exam_activity")
+    comparison = admin_body.pop("comparison")
     exam_stats = admin_body.pop("exam_statistics")
     platform_events = admin_body.pop("platform_activity")
     assert admin_body == {
         "total_students": 1,
         "total_teachers": 1,
         "total_courses": 0,
+        "active_courses": 0,
         "total_modules": 0,
         "total_questions": 0,
         "total_exams": 0,
@@ -103,8 +107,20 @@ def test_empty_state_returns_zeros_and_nulls(auth_client, admin, teacher, studen
     assert recent_exams == [] and recent_results == []
     assert activity["period_days"] == 7
     assert len(activity["items"]) == 7
+    assert len(activity["previous_items"]) == 7
     assert activity["current_total"] == activity["previous_total"] == 0
     assert activity["change_percentage"] is None
+    assert comparison["period_days"] == 30
+    assert comparison["student_registrations"] == {
+        "current_period": 1,
+        "previous_period": 0,
+        "change_percentage": None,
+    }
+    assert comparison["average_score"] == {
+        "current_period": None,
+        "previous_period": None,
+        "change_points": None,
+    }
     assert exam_stats == {
         "completed_attempts": 0,
         "graded_attempts": 0,
@@ -119,7 +135,9 @@ def test_empty_state_returns_zeros_and_nulls(auth_client, admin, teacher, studen
         "on_time_submission_rate": None,
     }
     assert [event["type"] for event in platform_events] == ["TEACHER_JOINED"]
-    assert auth_client(teacher).get(TEACHER).json() == {
+    teacher_body = auth_client(teacher).get(TEACHER).json()
+    teacher_activity = teacher_body.pop("result_activity")
+    assert teacher_body == {
         "my_courses": 0,
         "my_groups": 0,
         "my_students": 0,
@@ -128,13 +146,26 @@ def test_empty_state_returns_zeros_and_nulls(auth_client, admin, teacher, studen
         "active_assignments": 0,
         "pending_grading": 0,
         "average_student_score": None,
+        "upcoming_exams": [],
+        "course_cards": [],
+        "recent_results": [],
+        "grading_queue": [],
     }
+    assert teacher_activity["period_days"] == 7
+    assert len(teacher_activity["items"]) == len(teacher_activity["previous_items"]) == 7
+    assert all(item["average_score"] is None for item in teacher_activity["items"])
+    assert all(item["graded_attempts"] == 0 for item in teacher_activity["items"])
     assert auth_client(student).get(STUDENT).json() == {
         "my_courses": 0,
         "available_exams": 0,
         "completed_exams": 0,
         "average_score": None,
         "passed_exams": 0,
+        "upcoming_exams": [],
+        "course_progress": [],
+        "study_groups": [],
+        "recent_results": [],
+        "recent_activity": [],
     }
 
 
@@ -148,7 +179,7 @@ def test_admin_dashboard_counts_ignore_inactive_and_archived(auth_client, admin)
     author = TeacherFactory()
     TeacherFactory(status=UserStatus.INACTIVE)  # sanalmaydi
     CourseFactory()
-    CourseFactory(status=CourseStatus.ARCHIVED)  # sanalmaydi
+    CourseFactory(status=CourseStatus.ARCHIVED)  # totalda sanaladi, active'da sanalmaydi
     course = CourseFactory()
     module = ModuleFactory(course=course)
     ModuleFactory(course=course, status=ModuleStatus.ARCHIVED)  # sanalmaydi
@@ -161,7 +192,10 @@ def test_admin_dashboard_counts_ignore_inactive_and_archived(auth_client, admin)
     delta = {key: after[key] - before[key] for key in before if key.startswith("total_")}
     assert delta["total_students"] == 2
     assert delta["total_teachers"] == 1
-    assert delta["total_courses"] == 2
+    assert delta["total_courses"] == 3
+    assert after["active_courses"] - before["active_courses"] == 2
+    assert after["total_courses"] == after["summary"]["courses"]["total"]
+    assert after["active_courses"] == after["summary"]["courses"]["active"]
     assert delta["total_modules"] == 1
     assert delta["total_questions"] == 1
     assert delta["total_exams"] == 1
@@ -180,6 +214,61 @@ def test_admin_assignment_counts_use_effective_status(auth_client, admin):
     body = auth_client(admin).get(ADMIN).json()
     assert body["active_assignments"] == 1
     assert body["completed_assignments"] == 2
+
+
+def test_exam_activity_returns_daily_current_and_previous_periods():
+    now = timezone.now()
+    assignment = AssignmentFactory()
+    current = graded(assignment, StudentFactory(), 1, 80, True)
+    previous = graded(assignment, StudentFactory(), 1, 70, True)
+    current.submitted_at = now - timedelta(days=1)
+    previous.submitted_at = now - timedelta(days=8)
+    current.save(update_fields=["submitted_at"])
+    previous.save(update_fields=["submitted_at"])
+
+    activity = selectors.exam_activity(now)
+
+    assert len(activity["items"]) == len(activity["previous_items"]) == 7
+    assert sum(item["completed_attempts"] for item in activity["items"]) == 1
+    assert sum(item["completed_attempts"] for item in activity["previous_items"]) == 1
+    assert activity["current_total"] == activity["previous_total"] == 1
+    assert activity["change_percentage"] == 0.0
+
+
+def test_dashboard_comparison_returns_registration_growth_and_score_change():
+    now = timezone.now()
+    current_students = StudentFactory.create_batch(2)
+    previous_student = StudentFactory()
+    for user in current_students:
+        type(user).objects.filter(pk=user.pk).update(created_at=now - timedelta(days=5))
+    type(previous_student).objects.filter(pk=previous_student.pk).update(
+        created_at=now - timedelta(days=35)
+    )
+
+    assignment = AssignmentFactory()
+    current_attempts = [
+        graded(assignment, current_students[0], 1, 80, True),
+        graded(assignment, current_students[1], 1, 90, True),
+    ]
+    previous_attempt = graded(assignment, previous_student, 1, 70, True)
+    for attempt in current_attempts:
+        attempt.submitted_at = now - timedelta(days=5)
+        attempt.save(update_fields=["submitted_at"])
+    previous_attempt.submitted_at = now - timedelta(days=35)
+    previous_attempt.save(update_fields=["submitted_at"])
+
+    comparison = selectors.dashboard_comparison(now)
+
+    assert comparison["student_registrations"] == {
+        "current_period": 2,
+        "previous_period": 1,
+        "change_percentage": 100.0,
+    }
+    assert comparison["average_score"] == {
+        "current_period": 85.0,
+        "previous_period": 70.0,
+        "change_points": 15.0,
+    }
 
 
 def test_admin_score_stats_use_latest_graded_attempt_per_student_and_assignment(auth_client, admin):
@@ -389,11 +478,20 @@ def test_teacher_dashboard_numbers(auth_client, teacher):
     graded(mine, shared, 1, 70, True)
     graded(colleagues, shared, 1, 30, False)
     AttemptFactory(
-        assignment=colleagues, student=StudentFactory(), attempt_number=1, status="PENDING_GRADING"
+        assignment=colleagues,
+        student=StudentFactory(),
+        attempt_number=1,
+        status="PENDING_GRADING",
+        submitted_at=timezone.now(),
     )
     graded(AssignmentFactory(), StudentFactory(), 1, 100, True)  # begona kurs
 
     body = auth_client(teacher).get(TEACHER).json()
+    upcoming = body.pop("upcoming_exams")
+    result_activity = body.pop("result_activity")
+    course_cards = body.pop("course_cards")
+    recent_results = body.pop("recent_results")
+    grading_queue = body.pop("grading_queue")
     assert body == {
         "my_courses": 2,  # arxivlangan kurs sanalmaydi
         "my_groups": 2,
@@ -404,12 +502,36 @@ def test_teacher_dashboard_numbers(auth_client, teacher):
         "pending_grading": 1,  # kurs bo‘yicha (hamkasbining e’loni ham)
         "average_student_score": 50.0,  # (70 + 30) / 2 — faqat o‘z kurslari
     }
+    assert {item["assignment_id"] for item in upcoming} == {str(mine.id), str(colleagues.id)}
+    assert all(
+        {
+            "exam_title",
+            "course_name",
+            "groups",
+            "start_at",
+            "duration_minutes",
+            "students_count",
+            "status",
+        }.issubset(item)
+        for item in upcoming
+    )
+    assert sum(item["graded_attempts"] for item in result_activity["items"]) == 2
+    by_course = {item["course_id"]: item for item in course_cards}
+    assert by_course[str(course_a.id)]["average_score"] == 50.0
+    assert by_course[str(course_b.id)]["average_score"] is None
+    assert {item["percentage"] for item in recent_results} == {70.0, 30.0}
+    assert len(grading_queue) == 1
+    assert grading_queue[0]["pending_answers_count"] == 0
 
 
 # ------------------------------- student -------------------------------
 def test_student_dashboard_numbers(auth_client, student):
     course = CourseFactory()
     EnrollmentFactory(course=course, student=student)
+    teacher_link = CourseTeacherFactory(course=course)
+    group = StudyGroupFactory(course=course, main_teacher=teacher_link.teacher)
+    GroupStudentFactory(group=group, student=student)
+    classmate = GroupStudentFactory(group=group).student
     EnrollmentFactory(student=student, status=EnrollmentStatus.COMPLETED)
     EnrollmentFactory(student=student, status=EnrollmentStatus.REMOVED)  # sanalmaydi
 
@@ -418,7 +540,9 @@ def test_student_dashboard_numbers(auth_client, student):
     AttemptFactory(assignment=resumable, student=student)  # IN_PROGRESS
     exhausted = AssignmentFactory(exam__course=course, max_attempts=1)  # limit tugagan
     graded(exhausted, student, 1, 40, False)
-    AssignmentFactory(exam__course=course, start_at=timezone.now() + timedelta(days=1), end_at=None)
+    scheduled = AssignmentFactory(
+        exam__course=course, start_at=timezone.now() + timedelta(days=1), end_at=None
+    )
     AssignmentFactory(exam__course=course, status=AssignmentStatus.PAUSED)
     AssignmentFactory(exam__course=course, status=AssignmentStatus.DRAFT)
     AssignmentFactory()  # boshqa kurs
@@ -427,7 +551,13 @@ def test_student_dashboard_numbers(auth_client, student):
     graded(done, student, 1, 30, False)  # keyinroq yaxshilangan
     graded(done, student, 2, 90, True)
     pending = AssignmentFactory(exam__course=course, max_attempts=3)
-    AttemptFactory(assignment=pending, student=student, attempt_number=1, status="PENDING_GRADING")
+    AttemptFactory(
+        assignment=pending,
+        student=student,
+        attempt_number=1,
+        status="PENDING_GRADING",
+        submitted_at=timezone.now(),
+    )
 
     body = auth_client(student).get(STUDENT).json()
     assert body["my_courses"] == 2
@@ -436,6 +566,32 @@ def test_student_dashboard_numbers(auth_client, student):
     assert body["completed_exams"] == 3  # exhausted, done, pending
     assert body["passed_exams"] == 1  # faqat `done` (oxirgi attempt bo‘yicha)
     assert body["average_score"] == pytest.approx((40 + 90) / 2)
+    assert str(scheduled.id) in {item["assignment_id"] for item in body["upcoming_exams"]}
+    progress = next(item for item in body["course_progress"] if item["course_id"] == str(course.id))
+    assert progress["teacher"]["id"] == str(teacher_link.teacher_id)
+    assert progress["completed_assignments"] == 3
+    assert progress["total_assignments"] == 7
+    assert progress["progress_percentage"] == pytest.approx(42.86)
+    assert progress["next_step"]["assignment_id"]
+    assert body["study_groups"] == [
+        {
+            "group_id": str(group.id),
+            "group_name": group.name,
+            "course_id": str(course.id),
+            "course_name": course.name,
+            "teachers": [
+                {"id": str(teacher_link.teacher_id), "full_name": teacher_link.teacher.full_name}
+            ],
+            "classmates_count": 1,
+            "classmates": [{"id": str(classmate.id), "full_name": classmate.full_name}],
+        }
+    ]
+    assert len(body["recent_results"]) == 3
+    assert any(item["percentage"] is None for item in body["recent_results"])
+    assert {item["type"] for item in body["recent_activity"]} >= {
+        "ATTEMPT_STARTED",
+        "RESULT_SUBMITTED",
+    }
     assert open_one.pk
 
 
@@ -462,7 +618,7 @@ def test_dashboards_have_bounded_query_counts(
         graded(AssignmentFactory(exam__course=course), student, number, 70, True)
     with django_assert_max_num_queries(35):
         assert auth_client(admin).get(ADMIN).status_code == 200
-    with django_assert_max_num_queries(14):
+    with django_assert_max_num_queries(18):
         assert auth_client(teacher).get(TEACHER).status_code == 200
-    with django_assert_max_num_queries(10):
+    with django_assert_max_num_queries(22):
         assert auth_client(student).get(STUDENT).status_code == 200

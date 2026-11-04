@@ -11,6 +11,7 @@ from django.db.models import (
     ExpressionWrapper,
     F,
     OuterRef,
+    Prefetch,
     Q,
     QuerySet,
     Subquery,
@@ -18,8 +19,21 @@ from django.db.models import (
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 
-from apps.academics.choices import CourseStatus, EnrollmentStatus, GroupStatus, ModuleStatus
-from apps.academics.models import Course, CourseTeacher, Enrollment, Module, StudyGroup
+from apps.academics.choices import (
+    CourseStatus,
+    CourseTeacherType,
+    EnrollmentStatus,
+    GroupStatus,
+    ModuleStatus,
+)
+from apps.academics.models import (
+    Course,
+    CourseTeacher,
+    Enrollment,
+    GroupStudent,
+    Module,
+    StudyGroup,
+)
 from apps.assignments.choices import EffectiveStatus
 from apps.assignments.models import ExamAssignment, ExamAssignmentRecipient
 from apps.assignments.selectors import student_assignments, with_effective_status
@@ -322,10 +336,15 @@ def exam_activity(now: datetime, days: int = 7) -> dict:
         }
         for index in range(days)
     ]
+    previous_items = [
+        {
+            "date": previous_start + timedelta(days=index),
+            "completed_attempts": counts.get(previous_start + timedelta(days=index), 0),
+        }
+        for index in range(days)
+    ]
     current_total = sum(item["completed_attempts"] for item in items)
-    previous_total = sum(
-        counts.get(previous_start + timedelta(days=index), 0) for index in range(days)
-    )
+    previous_total = sum(item["completed_attempts"] for item in previous_items)
     change = (
         round((current_total - previous_total) * 100 / previous_total, 2)
         if previous_total
@@ -334,9 +353,76 @@ def exam_activity(now: datetime, days: int = 7) -> dict:
     return {
         "period_days": days,
         "items": items,
+        "previous_items": previous_items,
         "current_total": current_total,
         "previous_total": previous_total,
         "change_percentage": change,
+    }
+
+
+def dashboard_comparison(now: datetime, days: int = 30) -> dict:
+    """Joriy davrni undan oldingi teng davr bilan aniq nomlangan metrikalarda solishtiradi."""
+    current_start = now - timedelta(days=days)
+    previous_start = current_start - timedelta(days=days)
+
+    students = User.objects.filter(
+        role=UserRole.STUDENT,
+        status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
+    )
+    student_counts = students.aggregate(
+        current=Count(
+            "pk", filter=Q(created_at__gte=current_start, created_at__lte=now)
+        ),
+        previous=Count(
+            "pk", filter=Q(created_at__gte=previous_start, created_at__lt=current_start)
+        ),
+    )
+    current_students = student_counts["current"]
+    previous_students = student_counts["previous"]
+    student_change = (
+        round((current_students - previous_students) * 100 / previous_students, 2)
+        if previous_students
+        else None
+    )
+
+    graded = ExamAttempt.objects.filter(
+        status=AttemptStatus.GRADED,
+        submitted_at__isnull=False,
+        percentage__isnull=False,
+    )
+    score_averages = graded.aggregate(
+        current=Avg(
+            "percentage", filter=Q(submitted_at__gte=current_start, submitted_at__lte=now)
+        ),
+        previous=Avg(
+            "percentage",
+            filter=Q(submitted_at__gte=previous_start, submitted_at__lt=current_start),
+        ),
+    )
+    current_average = score_averages["current"]
+    previous_average = score_averages["previous"]
+    current_average = round(float(current_average), 2) if current_average is not None else None
+    previous_average = round(float(previous_average), 2) if previous_average is not None else None
+    score_change = (
+        round(current_average - previous_average, 2)
+        if current_average is not None and previous_average is not None
+        else None
+    )
+
+    return {
+        "period_days": days,
+        "current_period": {"start_at": current_start, "end_at": now},
+        "previous_period": {"start_at": previous_start, "end_at": current_start},
+        "student_registrations": {
+            "current_period": current_students,
+            "previous_period": previous_students,
+            "change_percentage": student_change,
+        },
+        "average_score": {
+            "current_period": current_average,
+            "previous_period": previous_average,
+            "change_points": score_change,
+        },
     }
 
 
@@ -476,7 +562,8 @@ def admin_dashboard(now: datetime | None = None) -> dict:
     return {
         "total_students": summary["students"]["total"],
         "total_teachers": summary["teachers"]["total"],
-        "total_courses": summary["courses"]["active"],
+        "total_courses": summary["courses"]["total"],
+        "active_courses": summary["courses"]["active"],
         "total_modules": Module.objects.filter(status=ModuleStatus.ACTIVE).count(),
         "total_questions": summary["questions"]["total"],
         "total_exams": summary["exams"]["total"],
@@ -490,9 +577,177 @@ def admin_dashboard(now: datetime | None = None) -> dict:
         "recent_exams": recent_exams(),
         "recent_results": recent_results(),
         "exam_activity": exam_activity(now),
+        "comparison": dashboard_comparison(now),
         "exam_statistics": statistics,
         "platform_activity": platform_activity(),
     }
+
+
+def _result_activity(attempts: QuerySet[ExamAttempt], now: datetime, days: int = 7) -> dict:
+    today = timezone.localdate(now)
+    current_start = today - timedelta(days=days - 1)
+    previous_start = current_start - timedelta(days=days)
+    rows = (
+        attempts.filter(
+            status=AttemptStatus.GRADED,
+            submitted_at__date__gte=previous_start,
+            submitted_at__date__lte=today,
+            percentage__isnull=False,
+        )
+        .annotate(day=TruncDate("submitted_at", tzinfo=timezone.get_current_timezone()))
+        .values("day")
+        .annotate(average_score=Avg("percentage"), graded_attempts=Count("pk"))
+    )
+    by_day = {row["day"]: row for row in rows}
+
+    def build(start):
+        return [
+            {
+                "date": start + timedelta(days=index),
+                "average_score": (
+                    round(float(by_day[day]["average_score"]), 2) if day in by_day else None
+                ),
+                "graded_attempts": by_day.get(day, {}).get("graded_attempts", 0),
+            }
+            for index in range(days)
+            for day in [start + timedelta(days=index)]
+        ]
+
+    return {
+        "period_days": days,
+        "items": build(current_start),
+        "previous_items": build(previous_start),
+    }
+
+
+def _teacher_upcoming_exams(teacher, now: datetime, limit: int = 5) -> list[dict]:
+    assignments = (
+        with_effective_status(
+            ExamAssignment.objects.filter(
+                exam__course__course_teachers__teacher=teacher,
+                is_archived=False,
+            ),
+            now,
+        )
+        .filter(effective_status__in=[EffectiveStatus.ACTIVE, EffectiveStatus.SCHEDULED])
+        .select_related("exam__course")
+        .annotate(students_count=Count("recipients", distinct=True))
+        .prefetch_related("assignment_groups__group")
+        .distinct()
+        .order_by("start_at")[:limit]
+    )
+    return [
+        {
+            "assignment_id": item.id,
+            "exam_id": item.exam_id,
+            "exam_title": item.exam.title,
+            "course_id": item.exam.course_id,
+            "course_name": item.exam.course.name,
+            "groups": [
+                {"id": link.group_id, "name": link.group.name}
+                for link in item.assignment_groups.all()
+            ],
+            "start_at": item.start_at,
+            "duration_minutes": item.duration_minutes,
+            "students_count": item.students_count,
+            "status": item.effective_status,
+        }
+        for item in assignments
+    ]
+
+
+def _teacher_course_cards(teacher, attempts: QuerySet[ExamAttempt]) -> list[dict]:
+    courses = (
+        Course.objects.filter(
+            status=CourseStatus.ACTIVE,
+            course_teachers__teacher=teacher,
+        )
+        .annotate(
+            groups_count=Count(
+                "groups", filter=Q(groups__status=GroupStatus.ACTIVE), distinct=True
+            ),
+            students_count=Count(
+                "enrollments",
+                filter=Q(
+                    enrollments__status=EnrollmentStatus.ACTIVE,
+                    enrollments__student__status=UserStatus.ACTIVE,
+                ),
+                distinct=True,
+            ),
+            exams_count=Count(
+                "exams",
+                filter=~Q(exams__status=ExamStatus.ARCHIVED),
+                distinct=True,
+            ),
+        )
+        .distinct()
+        .order_by("name", "created_at")
+    )
+    latest = only_latest(
+        attempts.filter(status=AttemptStatus.GRADED, percentage__isnull=False),
+        [AttemptStatus.GRADED],
+    )
+    averages = {
+        row["assignment__exam__course_id"]: round(float(row["average_score"]), 2)
+        for row in latest.values("assignment__exam__course_id").annotate(
+            average_score=Avg("percentage")
+        )
+    }
+    return [
+        {
+            "course_id": course.id,
+            "course_name": course.name,
+            "groups_count": course.groups_count,
+            "students_count": course.students_count,
+            "exams_count": course.exams_count,
+            "average_score": averages.get(course.id),
+        }
+        for course in courses
+    ]
+
+
+def _teacher_recent_results(attempts: QuerySet[ExamAttempt], limit: int = 5) -> list[dict]:
+    rows = attempts.filter(
+        status=AttemptStatus.GRADED,
+        submitted_at__isnull=False,
+    ).order_by("-submitted_at")[:limit]
+    return [
+        {
+            "attempt_id": item.id,
+            "student_id": item.student_id,
+            "student_name": item.student.full_name,
+            "exam_title": item.assignment.exam.title,
+            "course_name": item.assignment.exam.course.name,
+            "percentage": float(item.percentage) if item.percentage is not None else None,
+            "status": item.status,
+            "submitted_at": item.submitted_at,
+        }
+        for item in rows
+    ]
+
+
+def _teacher_grading_queue(attempts: QuerySet[ExamAttempt], limit: int = 5) -> list[dict]:
+    rows = (
+        attempts.filter(status=AttemptStatus.PENDING_GRADING, submitted_at__isnull=False)
+        .annotate(
+            pending_answers_count=Count(
+                "answers", filter=Q(answers__points_awarded__isnull=True), distinct=True
+            )
+        )
+        .order_by("submitted_at")[:limit]
+    )
+    return [
+        {
+            "attempt_id": item.id,
+            "student_id": item.student_id,
+            "student_name": item.student.full_name,
+            "exam_title": item.assignment.exam.title,
+            "course_name": item.assignment.exam.course.name,
+            "pending_answers_count": item.pending_answers_count,
+            "submitted_at": item.submitted_at,
+        }
+        for item in rows
+    ]
 
 
 def teacher_dashboard(teacher, now: datetime | None = None) -> dict:
@@ -528,19 +783,207 @@ def teacher_dashboard(teacher, now: datetime | None = None) -> dict:
         ),
         "pending_grading": attempts.filter(status=AttemptStatus.PENDING_GRADING).count(),
         "average_student_score": average,
+        "upcoming_exams": _teacher_upcoming_exams(teacher, now),
+        "result_activity": _result_activity(attempts, now),
+        "course_cards": _teacher_course_cards(teacher, attempts),
+        "recent_results": _teacher_recent_results(attempts),
+        "grading_queue": _teacher_grading_queue(attempts),
     }
+
+
+def _student_upcoming_exams(assignments, limit: int = 5) -> list[dict]:
+    items = assignments.filter(
+        Q(effective_status=EffectiveStatus.SCHEDULED)
+        | (
+            Q(effective_status=EffectiveStatus.ACTIVE)
+            & (
+                Q(active_attempt_id__isnull=False)
+                | Q(max_attempts__isnull=True)
+                | Q(attempts_used__lt=F("max_attempts"))
+            )
+        )
+    ).order_by("start_at")[:limit]
+    return [
+        {
+            "assignment_id": item.id,
+            "exam_title": item.exam.title,
+            "course_id": item.exam.course_id,
+            "course_name": item.exam.course.name,
+            "start_at": item.start_at,
+            "duration_minutes": item.duration_minutes,
+            "questions_count": item.questions_count,
+            "status": item.effective_status,
+        }
+        for item in items
+    ]
+
+
+def _student_course_progress(student, assignments) -> list[dict]:
+    enrollments = list(
+        Enrollment.objects.filter(
+            student=student,
+            status__in=[EnrollmentStatus.ACTIVE, EnrollmentStatus.COMPLETED],
+        )
+        .select_related("course")
+        .order_by("course__name")
+    )
+    course_ids = [item.course_id for item in enrollments]
+    main_teachers = {
+        row.course_id: row.teacher
+        for row in CourseTeacher.objects.filter(
+            course_id__in=course_ids,
+            type=CourseTeacherType.MAIN,
+            teacher__status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
+        )
+        .select_related("teacher")
+        .order_by("assigned_at")
+    }
+    assignment_items = list(assignments.order_by("start_at"))
+    completed_ids = set(
+        ExamAttempt.objects.filter(student=student, status__in=RESULT_STATUSES).values_list(
+            "assignment_id", flat=True
+        )
+    )
+    by_course: dict = {course_id: [] for course_id in course_ids}
+    for item in assignment_items:
+        by_course.setdefault(item.exam.course_id, []).append(item)
+
+    result = []
+    for enrollment in enrollments:
+        course_assignments = by_course.get(enrollment.course_id, [])
+        completed = sum(item.id in completed_ids for item in course_assignments)
+        total = len(course_assignments)
+        next_item = next(
+            (
+                item
+                for item in course_assignments
+                if item.id not in completed_ids
+                and item.effective_status in [EffectiveStatus.ACTIVE, EffectiveStatus.SCHEDULED]
+            ),
+            None,
+        )
+        teacher = main_teachers.get(enrollment.course_id)
+        result.append(
+            {
+                "course_id": enrollment.course_id,
+                "course_name": enrollment.course.name,
+                "teacher": (
+                    {"id": teacher.id, "full_name": teacher.full_name} if teacher else None
+                ),
+                "progress_percentage": round(completed * 100 / total, 2) if total else 0.0,
+                "completed_assignments": completed,
+                "total_assignments": total,
+                "next_step": (
+                    {
+                        "assignment_id": next_item.id,
+                        "exam_title": next_item.exam.title,
+                        "start_at": next_item.start_at,
+                        "status": next_item.effective_status,
+                    }
+                    if next_item
+                    else None
+                ),
+            }
+        )
+    return result
+
+
+def _student_study_groups(student) -> list[dict]:
+    groups = (
+        StudyGroup.objects.filter(
+            status=GroupStatus.ACTIVE,
+            course__status=CourseStatus.ACTIVE,
+            group_students__student=student,
+        )
+        .select_related("course", "main_teacher", "support_teacher")
+        .prefetch_related(
+            Prefetch(
+                "group_students",
+                queryset=GroupStudent.objects.filter(student__status=UserStatus.ACTIVE)
+                .select_related("student")
+                .order_by("student__full_name"),
+                to_attr="active_memberships",
+            )
+        )
+        .distinct()
+        .order_by("name")
+    )
+    result = []
+    for group in groups:
+        classmates = [
+            item.student for item in group.active_memberships if item.student_id != student.id
+        ]
+        teachers = [teacher for teacher in [group.main_teacher, group.support_teacher] if teacher]
+        result.append(
+            {
+                "group_id": group.id,
+                "group_name": group.name,
+                "course_id": group.course_id,
+                "course_name": group.course.name,
+                "teachers": [
+                    {"id": teacher.id, "full_name": teacher.full_name} for teacher in teachers
+                ],
+                "classmates_count": len(classmates),
+                "classmates": [
+                    {"id": classmate.id, "full_name": classmate.full_name}
+                    for classmate in classmates[:5]
+                ],
+            }
+        )
+    return result
+
+
+def _student_recent_results(own_attempts: QuerySet[ExamAttempt], limit: int = 5) -> list[dict]:
+    rows = only_latest(
+        own_attempts.filter(status__in=RESULT_STATUSES, submitted_at__isnull=False)
+    ).order_by("-submitted_at")[:limit]
+    return [
+        {
+            "attempt_id": item.id,
+            "exam_title": item.assignment.exam.title,
+            "course_id": item.assignment.exam.course_id,
+            "course_name": item.assignment.exam.course.name,
+            "percentage": float(item.percentage) if item.percentage is not None else None,
+            "status": item.status,
+            "submitted_at": item.submitted_at,
+        }
+        for item in rows
+    ]
+
+
+def _student_recent_activity(own_attempts: QuerySet[ExamAttempt], limit: int = 10) -> list[dict]:
+    events = []
+    for item in own_attempts.order_by("-started_at")[:limit]:
+        exam_title = item.assignment.exam.title
+        events.append(
+            {
+                "type": "ATTEMPT_STARTED",
+                "description": f"{exam_title} imtihoni boshlandi",
+                "occurred_at": item.started_at,
+            }
+        )
+        if item.submitted_at is not None:
+            events.append(
+                {
+                    "type": "RESULT_SUBMITTED",
+                    "description": f"{exam_title} imtihoni topshirildi",
+                    "occurred_at": item.submitted_at,
+                }
+            )
+    return sorted(events, key=lambda event: event["occurred_at"], reverse=True)[:limit]
 
 
 def student_dashboard(student, now: datetime | None = None) -> dict:
     now = now or timezone.now()
-    own_attempts = ExamAttempt.objects.filter(student=student)
+    own_attempts = attempts_visible_to(student)
     average, _ = score_stats(own_attempts)
 
     latest_graded = only_latest(
         own_attempts.filter(status=AttemptStatus.GRADED), [AttemptStatus.GRADED]
     )
+    assignments = student_assignments(student, now)
     available = (
-        student_assignments(student, now)
+        assignments
         .filter(effective_status=EffectiveStatus.ACTIVE)
         .filter(
             Q(active_attempt_id__isnull=False)
@@ -560,4 +1003,9 @@ def student_dashboard(student, now: datetime | None = None) -> dict:
         .count(),
         "average_score": average,
         "passed_exams": latest_graded.filter(passed=True).count(),
+        "upcoming_exams": _student_upcoming_exams(assignments),
+        "course_progress": _student_course_progress(student, assignments),
+        "study_groups": _student_study_groups(student),
+        "recent_results": _student_recent_results(own_attempts),
+        "recent_activity": _student_recent_activity(own_attempts),
     }
