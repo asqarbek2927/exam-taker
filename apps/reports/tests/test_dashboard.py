@@ -12,7 +12,7 @@ from apps.academics.tests.factories import (
     ModuleFactory,
     StudyGroupFactory,
 )
-from apps.assignments.choices import AssignmentStatus
+from apps.assignments.choices import AssignmentStatus, EffectiveStatus
 from apps.assignments.models import ExamAssignmentRecipient
 from apps.assignments.tests.factories import AssignmentFactory
 from apps.attempts.choices import FinalizationReason
@@ -498,11 +498,14 @@ def test_teacher_dashboard_numbers(auth_client, teacher):
         "my_students": 2,  # `shared` ikkala kursda ham — bir marta; REMOVED sanalmaydi
         "my_questions": 1,  # faqat o‘zi yaratgan va ACTIVE
         "my_exams": 1,  # faqat o‘zi yaratgan va arxivlanmagan
-        "active_assignments": 1,  # faqat o‘zi e’lon qilgan va hozir ACTIVE
+        "active_assignments": 2,  # teacher kurslaridagi barcha hozir ACTIVE assignmentlar
         "pending_grading": 1,  # kurs bo‘yicha (hamkasbining e’loni ham)
         "average_student_score": 50.0,  # (70 + 30) / 2 — faqat o‘z kurslari
     }
     assert {item["assignment_id"] for item in upcoming} == {str(mine.id), str(colleagues.id)}
+    assert body["active_assignments"] == sum(
+        item["status"] == EffectiveStatus.ACTIVE for item in upcoming
+    )
     assert all(
         {
             "exam_title",

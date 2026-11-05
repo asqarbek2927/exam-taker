@@ -36,7 +36,7 @@ from apps.academics.models import (
 )
 from apps.assignments.choices import EffectiveStatus
 from apps.assignments.models import ExamAssignment, ExamAssignmentRecipient
-from apps.assignments.selectors import student_assignments, with_effective_status
+from apps.assignments.selectors import staff_visible, student_assignments, with_effective_status
 from apps.attempts.choices import AttemptStatus, FinalizationReason
 from apps.attempts.models import ExamAttempt
 from apps.attempts.selectors import attempts_visible_to
@@ -620,20 +620,21 @@ def _result_activity(attempts: QuerySet[ExamAttempt], now: datetime, days: int =
     }
 
 
-def _teacher_upcoming_exams(teacher, now: datetime, limit: int = 5) -> list[dict]:
+def _teacher_assignments(teacher, now: datetime) -> QuerySet[ExamAssignment]:
+    """Dashboard uchun teacher ko‘ra oladigan, arxivlanmagan assignmentlar."""
+    return with_effective_status(staff_visible(teacher).filter(is_archived=False), now)
+
+
+def _teacher_upcoming_exams(
+    assignments: QuerySet[ExamAssignment], limit: int = 5
+) -> list[dict]:
     assignments = (
-        with_effective_status(
-            ExamAssignment.objects.filter(
-                exam__course__course_teachers__teacher=teacher,
-                is_archived=False,
-            ),
-            now,
+        assignments.filter(
+            effective_status__in=[EffectiveStatus.ACTIVE, EffectiveStatus.SCHEDULED]
         )
-        .filter(effective_status__in=[EffectiveStatus.ACTIVE, EffectiveStatus.SCHEDULED])
         .select_related("exam__course")
         .annotate(students_count=Count("recipients", distinct=True))
         .prefetch_related("assignment_groups__group")
-        .distinct()
         .order_by("start_at")[:limit]
     )
     return [
@@ -758,6 +759,7 @@ def teacher_dashboard(teacher, now: datetime | None = None) -> dict:
         ).values_list("course_id", flat=True)
     )
     attempts = attempts_visible_to(teacher)
+    assignments = _teacher_assignments(teacher, now)
     average, _ = score_stats(attempts)
     return {
         "my_courses": len(course_ids),
@@ -776,14 +778,12 @@ def teacher_dashboard(teacher, now: datetime | None = None) -> dict:
         "my_exams": Exam.objects.filter(created_by=teacher)
         .exclude(status=ExamStatus.ARCHIVED)
         .count(),
-        "active_assignments": _count_effective(
-            ExamAssignment.objects.filter(published_by=teacher, is_archived=False),
-            EffectiveStatus.ACTIVE,
-            now,
-        ),
+        "active_assignments": assignments.filter(
+            effective_status=EffectiveStatus.ACTIVE
+        ).count(),
         "pending_grading": attempts.filter(status=AttemptStatus.PENDING_GRADING).count(),
         "average_student_score": average,
-        "upcoming_exams": _teacher_upcoming_exams(teacher, now),
+        "upcoming_exams": _teacher_upcoming_exams(assignments),
         "result_activity": _result_activity(attempts, now),
         "course_cards": _teacher_course_cards(teacher, attempts),
         "recent_results": _teacher_recent_results(attempts),

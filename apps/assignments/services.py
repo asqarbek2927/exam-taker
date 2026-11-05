@@ -31,8 +31,9 @@ from .models import (
 from .selectors import assignment_has_attempts, effective_status_of
 from .snapshots import ensure_assignment_snapshot
 
-# Attempt boshlangan assignmentda faqat staff uchun `internal_note` o'zgaradi.
-EDITABLE_AFTER_ATTEMPTS = frozenset({"internal_note"})
+# Attempt boshlangan assignmentda staff qaydni o‘zgartirishi va talabaga zarar
+# bermaydigan tarzda urinishlar limitini faqat oshirishi mumkin.
+EDITABLE_AFTER_ATTEMPTS = frozenset({"internal_note", "max_attempts"})
 
 TRANSITIONS: dict[str, tuple[frozenset[str], str]] = {
     "publish": (frozenset({AssignmentStatus.DRAFT}), AssignmentStatus.PUBLISHED),
@@ -318,10 +319,42 @@ def update_assignment(*, assignment: ExamAssignment, **fields) -> ExamAssignment
 
 
 def _check_editable_after_attempts(assignment: ExamAssignment, fields: dict) -> None:
-    locked_fields = set(fields) - EDITABLE_AFTER_ATTEMPTS
+    def relation_ids(items) -> set:
+        return {item.pk for item in items}
+
+    def field_changed(name: str, value) -> bool:
+        if name == "groups":
+            current = set(
+                assignment.assignment_groups.values_list("group_id", flat=True)
+            )
+            return current != relation_ids(value)
+        if name == "students":
+            current = set(
+                assignment.assignment_students.values_list("student_id", flat=True)
+            )
+            return current != relation_ids(value)
+        return getattr(assignment, name) != value
+
+    changed_fields = {
+        name for name, value in fields.items() if field_changed(name, value)
+    }
+    if "max_attempts" in changed_fields:
+        current_limit = assignment.max_attempts
+        new_limit = fields["max_attempts"]
+        limit_expanded = current_limit is not None and (
+            new_limit is None or new_limit > current_limit
+        )
+        if not limit_expanded:
+            raise ConflictError(
+                "Attempt boshlangan assignmentda max_attempts faqat oshirilishi "
+                "yoki cheklanmagan qilinishi mumkin."
+            )
+
+    locked_fields = changed_fields - EDITABLE_AFTER_ATTEMPTS
     if locked_fields:
         raise ConflictError(
-            "Attempt boshlangan assignmentda faqat internal_note o'zgarishi mumkin "
+            "Attempt boshlangan assignmentda faqat internal_note va max_attemptsni "
+            "oshirish mumkin "
             f"(locked: {', '.join(sorted(locked_fields))})."
         )
 

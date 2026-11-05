@@ -282,6 +282,11 @@ Published assignment yoki attempt bilan bog‘langan exam kontenti edit-lock bil
 | POST | `/exam-assignments/{id}/release-answer-review` | Owner/Admin | Answer reviewni release qilish |
 | POST | `/exam-assignments/{id}/start` | Student | Attempt boshlash yoki faol attemptni davom ettirish |
 
+Attempt boshlanganidan keyin `internal_note`ni tahrirlash va `max_attempts`ni oshirish
+(yoki `null` bilan cheklanmagan qilish) mumkin. Limitni kamaytirish hamda imtihon shartlari,
+vaqt yoki auditoriyani o‘zgartirish bloklanadi. PATCH to‘liq forma payloadini yuborsa,
+qiymati o‘zgarmagan locklangan maydonlar xato hisoblanmaydi.
+
 Yangi frontend statusni arbitrary PATCH qilmasin; `transitions` yoki aniq action endpointlaridan
 foydalansin. Attempt boshlanganidan keyin fairness-sensitive fieldlar lock qilinadi.
 

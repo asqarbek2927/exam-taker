@@ -536,20 +536,45 @@ def test_finished_assignments_cannot_be_edited(auth_client, ctx, stored):
     assert response.status_code == 400
 
 
-def test_assignment_with_attempts_only_allows_internal_note(auth_client, ctx):
+def test_assignment_with_attempts_allows_note_and_attempt_limit_increase(auth_client, ctx):
     from apps.attempts.tests.factories import AttemptFactory
 
     assignment = AssignmentFactory(
-        exam=ctx["exam"], published_by=ctx["teacher"], ensure_question=False
+        exam=ctx["exam"],
+        published_by=ctx["teacher"],
+        max_attempts=1,
+        ensure_question=False,
     )
     AttemptFactory(assignment=assignment, student=ctx["outside"])
     client = auth_client(ctx["teacher"])
     url = f"{URL}/{assignment.id}"
 
     assert client.patch(url, {"duration_minutes": 5}, format="json").status_code == 409
-    assert client.patch(url, {"max_attempts": 9}, format="json").status_code == 409
+    expanded = client.patch(
+        url,
+        {
+            "audience_type": assignment.audience_type,
+            "availability_type": assignment.availability_type,
+            "group_ids": [],
+            "student_ids": [],
+            "start_at": assignment.start_at.isoformat(),
+            "end_at": assignment.end_at.isoformat(),
+            "duration_minutes": assignment.duration_minutes,
+            "max_attempts": 3,
+            "result_review_mode": assignment.result_review_mode,
+            "internal_note": assignment.internal_note,
+        },
+        format="json",
+    )
+    assert expanded.status_code == 200, expanded.json()
+    assert expanded.json()["max_attempts"] == 3
+    assert client.patch(url, {"max_attempts": 2}, format="json").status_code == 409
     assert (
-        client.patch(url, {"audience_type": "ALL_COURSE_STUDENTS"}, format="json").status_code
+        client.patch(
+            url,
+            {"audience_type": "GROUPS", "group_ids": [str(ctx["group"].id)]},
+            format="json",
+        ).status_code
         == 409
     )
     assert (
