@@ -1,4 +1,7 @@
-# ExamTaker: frontend handoff va AWS HTTP deploy
+# ExamTaker: frontend handoff va eski AWS HTTP deploy
+
+> Bu HTTP konfiguratsiya faqat eski integratsiya/test muhiti uchun. Real production deploy uchun
+> [`PRODUCTION_DEPLOY_UZ.md`](PRODUCTION_DEPLOY_UZ.md) dan foydalaning.
 
 Yangilangan sana: 2026-10-29
 

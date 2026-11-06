@@ -16,7 +16,8 @@ RUN pip install -r requirements.txt
 COPY . .
 
 # Statik fayllar build vaqtida yig‘iladi (WhiteNoise). Qiymatlar faqat build uchun.
-RUN SECRET_KEY=build-only DATABASE_URL=sqlite:////tmp/build.sqlite3 \
+RUN SECRET_KEY=build-only ALLOWED_HOSTS=localhost ALLOW_SQLITE_IN_PRODUCTION=true \
+    DATABASE_URL=sqlite:////tmp/build.sqlite3 \
     python manage.py collectstatic --noinput \
     && mkdir -p /app/data /app/media \
     && chmod +x /app/docker/entrypoint.sh \
@@ -26,4 +27,4 @@ USER app
 EXPOSE 8000
 
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--access-logfile", "-", "--error-logfile", "-"]
+CMD ["gunicorn", "--config", "gunicorn.conf.py", "config.wsgi:application"]

@@ -16,6 +16,7 @@ from apps.questions.urls import router as questions_router
 from apps.reports.urls import urlpatterns as reports_urlpatterns
 from apps.users.urls import auth_urlpatterns
 from apps.users.urls import router as users_router
+from common.views import health_live, health_ready
 
 # Bitta root router: users + academics resurslari (`/api/v1/...`).
 api_router = DefaultRouter(trailing_slash=False)
@@ -41,6 +42,8 @@ handler404 = "common.views.not_found"
 handler500 = "common.views.server_error"
 
 urlpatterns = [
+    path("health/live", health_live, name="health-live"),
+    path("health/ready", health_ready, name="health-ready"),
     path("admin/", admin.site.urls),
     path("api/v1/", include(api_v1_patterns)),
 ]

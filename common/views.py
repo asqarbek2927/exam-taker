@@ -1,7 +1,36 @@
-"""URL resolver darajasidagi 404/500 uchun JSON handlerlar (faqat `/api/` yo‘llari)."""
+"""Umumiy HTTP viewlar: healthcheck hamda API 404/500 handlerlari."""
 
+import logging
+
+from django.core.cache import cache
+from django.db import connection
 from django.http import JsonResponse
 from django.views import defaults
+from django.views.decorators.http import require_GET
+
+logger = logging.getLogger(__name__)
+
+
+@require_GET
+def health_live(request):
+    """Process ishlayotganini bildiradi; tashqi servislarga murojaat qilmaydi."""
+    return JsonResponse({"status": "ok"})
+
+
+@require_GET
+def health_ready(request):
+    """Web process DB va shared cache bilan ishlashga tayyorligini tekshiradi."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        cache.set("health:ready", "ok", timeout=30)
+        if cache.get("health:ready") != "ok":
+            raise RuntimeError("Cache read/write check failed")
+    except Exception:
+        logger.exception("Readiness check failed")
+        return JsonResponse({"status": "unavailable"}, status=503)
+    return JsonResponse({"status": "ok"})
 
 
 def _is_api(request) -> bool:

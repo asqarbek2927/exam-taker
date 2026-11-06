@@ -6,9 +6,11 @@ venv/
 .env.aws
 .env.production
 !.env.aws.example
+!.env.production.example
 *.sqlite3
 staticfiles/
 media/
+backups/
 .pytest_cache/
 .ruff_cache/
 .coverage

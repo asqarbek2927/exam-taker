@@ -224,6 +224,7 @@ def database_from_env(default: str | None = None) -> dict:
         config = env.db("DATABASE_URL", default=default)
     is_sqlite = config["ENGINE"] == "django.db.backends.sqlite3"
     config["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=0 if is_sqlite else 60)
+    config["CONN_HEALTH_CHECKS"] = not is_sqlite
     if is_sqlite:
         config["OPTIONS"] = {**config.get("OPTIONS", {}), "timeout": 20}
     return config

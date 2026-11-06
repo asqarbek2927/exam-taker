@@ -227,11 +227,24 @@ DATABASE_URL=postgres://<user>:<password>@localhost:5432/<database> \
   DJANGO_SETTINGS_MODULE=config.settings.test pytest --create-db
 ```
 
-571 ta test: auth, users, permission matritsasi, queryset scoping,
+586 ta test: auth, users, permission matritsasi, queryset scoping,
 academics, savol validatsiyasi, imtihon CRUD, edit-lock, assignment (status/transition/audience/eligibility),
 attempt (start/autosave/submit/grading/expiry/leakage), DB constraintlar, race condition, OpenAPI.
 
-## Production eslatmalari
+## Production deploy
+
+Real domen, PostgreSQL, Docker, Nginx va avtomatik Let’s Encrypt HTTPS bilan deploy qo‘llanmasi:
+[`docs/PRODUCTION_DEPLOY_UZ.md`](docs/PRODUCTION_DEPLOY_UZ.md).
+
+Production konfiguratsiyasi:
+
+```bash
+cp .env.production.example .env.production
+# .env.production ichidagi barcha CHANGE_ME/example.com qiymatlarini almashtiring
+sh docker/deploy-production.sh
+```
+
+## Eski AWS HTTP handoff eslatmalari
 
 Frontendga topshirish holati va AWS EC2 HTTP deploy qadamlari:
 [`docs/FRONTEND_AND_AWS_HANDOFF_UZ.md`](docs/FRONTEND_AND_AWS_HANDOFF_UZ.md).

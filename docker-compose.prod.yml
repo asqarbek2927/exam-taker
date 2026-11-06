@@ -1,0 +1,223 @@
+name: examtaker
+
+x-app: &app
+  image: examtaker-app:latest
+  env_file: ${APP_ENV_FILE:-.env.production}
+  environment:
+    DJANGO_SETTINGS_MODULE: config.settings.prod
+    NUM_PROXIES: "1"
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    stop_grace_period: 30s
+
+  media-init:
+    image: examtaker-app:latest
+    user: "0:0"
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - mkdir -p /app/media && chown -R app:app /app/media && chmod -R u+rwX,go+rX /app/media
+    volumes:
+      - media_data:/app/media
+
+  web:
+    <<: *app
+    build: .
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      NUM_PROXIES: "1"
+      RUN_MIGRATIONS: "1"
+    expose:
+      - "8000"
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      media-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, urllib.request; request=urllib.request.Request('http://127.0.0.1:8000/health/ready', headers={'Host': os.environ['DOMAIN']}); urllib.request.urlopen(request, timeout=3).read()",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    stop_grace_period: 45s
+
+  finalizer:
+    <<: *app
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      NUM_PROXIES: "1"
+      RUN_MIGRATIONS: "0"
+    command:
+      [
+        "sh",
+        "-c",
+        "while true; do python manage.py finalize_expired_attempts; sleep 60; done",
+      ]
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      web:
+        condition: service_healthy
+
+  maintenance:
+    <<: *app
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      RUN_MIGRATIONS: "0"
+    command:
+      [
+        "sh",
+        "-c",
+        "while true; do python manage.py flushexpiredtokens; sleep 86400; done",
+      ]
+    depends_on:
+      web:
+        condition: service_healthy
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGDATABASE: ${POSTGRES_DB:?POSTGRES_DB is required}
+      PGUSER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          file="/backups/examtaker_$$(date -u +%Y%m%dT%H%M%SZ).sql"
+          if pg_dump --no-owner --no-privileges --file "$$file"; then
+            gzip "$$file"
+          else
+            rm -f "$$file"
+          fi
+          find /backups -type f -name 'examtaker_*.sql.gz' -mtime "+$${BACKUP_RETENTION_DAYS}" -delete
+          sleep 86400
+        done
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      web:
+        condition: service_healthy
+
+  media-backup:
+    image: alpine:3.21
+    restart: unless-stopped
+    environment:
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          file="/backups/media_$$(date -u +%Y%m%dT%H%M%SZ).tar.gz"
+          tar -czf "$$file" -C /media .
+          find /backups -type f -name 'media_*.tar.gz' -mtime "+$${BACKUP_RETENTION_DAYS}" -delete
+          sleep 86400
+        done
+    volumes:
+      - media_data:/media:ro
+      - ./backups:/backups
+    depends_on:
+      media-init:
+        condition: service_completed_successfully
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx-production.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
+      - media_data:/var/www/media:ro
+    command:
+      [
+        "/bin/sh",
+        "-c",
+        "while true; do sleep 21600; nginx -s reload; done & exec nginx -g 'daemon off;'",
+      ]
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/health/live || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - while true; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 43200; done
+    depends_on:
+      nginx:
+        condition: service_healthy
+
+  nginx-bootstrap:
+    image: nginx:1.27-alpine
+    profiles: ["bootstrap"]
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is required}
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx-bootstrap.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - certbot_webroot:/var/www/certbot:ro
+
+  certbot-bootstrap:
+    image: certbot/certbot:latest
+    profiles: ["bootstrap"]
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is required}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:?LETSENCRYPT_EMAIL is required}
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - certbot certonly --webroot -w /var/www/certbot --non-interactive --agree-tos --no-eff-email --email "$$LETSENCRYPT_EMAIL" -d "$$DOMAIN"
+    depends_on:
+      - nginx-bootstrap
+
+volumes:
+  postgres_data:
+  media_data:
+  letsencrypt:
+  certbot_webroot:
