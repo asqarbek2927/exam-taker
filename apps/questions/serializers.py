@@ -138,3 +138,33 @@ class QuestionUpdateSerializer(serializers.Serializer):
                 {"options": ["Savol turi o‘zgarsa, options ham yuborilishi shart."]}
             )
         return attrs
+
+
+class QuestionImportFileSerializer(serializers.Serializer):
+    file = serializers.FileField(
+        write_only=True,
+        help_text="`import-template` endpointidan olingan XLSX fayl.",
+    )
+
+    def validate_file(self, value):
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("XLSX fayl hajmi 5 MB dan oshmasligi kerak.")
+        if not value.name.lower().endswith(".xlsx"):
+            raise serializers.ValidationError("Faqat .xlsx formatidagi fayl qabul qilinadi.")
+        return value
+
+
+class QuestionImportContextSerializer(serializers.Serializer):
+    course_id = UUIDRelatedField(queryset=Course.objects.all(), source="course")
+    module_id = UUIDRelatedField(queryset=Module.objects.all(), source="module")
+
+
+class QuestionImportTemplateQuerySerializer(QuestionImportContextSerializer):
+    pass
+
+
+class QuestionImportResponseSerializer(serializers.Serializer):
+    created_count = serializers.IntegerField()
+    course_id = serializers.UUIDField()
+    module_id = serializers.UUIDField()
+    question_ids = serializers.ListField(child=serializers.UUIDField())

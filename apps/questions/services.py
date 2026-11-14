@@ -55,6 +55,14 @@ def _is_locked(question: Question) -> bool:
     return question_is_locked(question)
 
 
+def validate_question_context(*, user, course: Course, module: Module) -> None:
+    """Savol yaratish/import qilish uchun kurs va modul kontekstini tekshiradi."""
+    if not has_course_access(user, course):
+        raise AccessDeniedError("Siz bu kursga biriktirilmagansiz.")
+    _ensure_course_editable(course)
+    _ensure_module_usable(course, module)
+
+
 @transaction.atomic
 def create_question(
     *,
@@ -67,10 +75,7 @@ def create_question(
     default_points: Decimal | None = None,
     difficulty: str = QuestionDifficulty.MEDIUM,
 ) -> Question:
-    if not has_course_access(user, course):
-        raise AccessDeniedError("Siz bu kursga biriktirilmagansiz.")
-    _ensure_course_editable(course)
-    _ensure_module_usable(course, module)
+    validate_question_context(user=user, course=course, module=module)
     _assert_valid_options(type, options)
 
     question = Question.objects.create(
@@ -84,6 +89,12 @@ def create_question(
     )
     _replace_options(question, options)
     return question
+
+
+@transaction.atomic
+def import_questions(*, user, questions: list[dict]) -> list[Question]:
+    """Oldindan validatsiya qilingan savollarni bitta transaction ichida yaratadi."""
+    return [create_question(user=user, **question) for question in questions]
 
 
 @transaction.atomic

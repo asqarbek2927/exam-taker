@@ -1,3 +1,4 @@
+from django.http import HttpResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
     OpenApiParameter,
@@ -5,8 +6,9 @@ from drf_spectacular.utils import (
     extend_schema,
     extend_schema_view,
 )
-from rest_framework import mixins, status, viewsets
+from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from common.constants import UUID_REGEX
@@ -21,9 +23,14 @@ from .serializers import (
     QuestionBankSummarySerializer,
     QuestionCreateSerializer,
     QuestionDetailSerializer,
+    QuestionImportContextSerializer,
+    QuestionImportFileSerializer,
+    QuestionImportResponseSerializer,
+    QuestionImportTemplateQuerySerializer,
     QuestionListSerializer,
     QuestionUpdateSerializer,
 )
+from .xlsx import QuestionXLSXError, build_question_import_template, parse_question_import
 
 
 @extend_schema_view(
@@ -108,6 +115,91 @@ class QuestionViewSet(
     def summary(self, request):
         data = selectors.question_bank_summary(request.user)
         return Response(QuestionBankSummarySerializer(data).data)
+
+    @extend_schema(
+        tags=["questions"],
+        parameters=[QuestionImportTemplateQuerySerializer],
+        responses={
+            (
+                200,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ): OpenApiTypes.BINARY
+        },
+        description="Tanlangan kurs va modul ma'lumotlari yozilgan XLSX import shabloni.",
+    )
+    @action(detail=False, methods=["get"], url_path="import-template")
+    def import_template(self, request):
+        serializer = QuestionImportTemplateQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        course = serializer.validated_data["course"]
+        module = serializer.validated_data["module"]
+        services.validate_question_context(user=request.user, course=course, module=module)
+        content = build_question_import_template(course=course, module=module)
+        response = HttpResponse(
+            content,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = (
+            f'attachment; filename="questions-{course.id}-{module.id}.xlsx"'
+        )
+        return response
+
+    @extend_schema(
+        tags=["questions"],
+        request=QuestionImportFileSerializer,
+        responses={201: QuestionImportResponseSerializer},
+        description="XLSX ichidagi barcha savollarni atomik tarzda question bankka import qiladi.",
+    )
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="import",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def import_xlsx(self, request):
+        upload = QuestionImportFileSerializer(data=request.data)
+        upload.is_valid(raise_exception=True)
+        try:
+            parsed = parse_question_import(upload.validated_data["file"])
+        except QuestionXLSXError as exc:
+            raise serializers.ValidationError({"file": [str(exc)]}) from exc
+
+        context = QuestionImportContextSerializer(
+            data={"course_id": parsed.course_id, "module_id": parsed.module_id}
+        )
+        context.is_valid(raise_exception=True)
+        course = context.validated_data["course"]
+        module = context.validated_data["module"]
+        services.validate_question_context(user=request.user, course=course, module=module)
+
+        validated_questions = []
+        row_errors = []
+        for item in parsed.questions:
+            question = QuestionCreateSerializer(
+                data={
+                    "course_id": str(course.id),
+                    "module_id": str(module.id),
+                    **item.data,
+                }
+            )
+            if question.is_valid():
+                validated_questions.append(question.validated_data)
+            else:
+                row_errors.append({"row": item.row, "errors": question.errors})
+        if row_errors:
+            raise serializers.ValidationError({"rows": row_errors})
+
+        created = services.import_questions(user=request.user, questions=validated_questions)
+        response_data = {
+            "created_count": len(created),
+            "course_id": course.id,
+            "module_id": module.id,
+            "question_ids": [question.id for question in created],
+        }
+        return Response(
+            QuestionImportResponseSerializer(response_data).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     def create(self, request, *args, **kwargs):
         serializer = QuestionCreateSerializer(data=request.data)

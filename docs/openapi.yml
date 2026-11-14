@@ -3575,6 +3575,60 @@ paths:
               schema:
                 $ref: '#/components/schemas/QuestionDetail'
           description: ''
+  /api/v1/questions/import:
+    post:
+      operationId: v1_questions_import_create
+      description: XLSX ichidagi barcha savollarni atomik tarzda question bankka import
+        qiladi.
+      tags:
+      - questions
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/QuestionImportFileRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QuestionImportFileRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionImportResponse'
+          description: ''
+  /api/v1/questions/import-template:
+    get:
+      operationId: v1_questions_import_template_retrieve
+      description: Tanlangan kurs va modul ma'lumotlari yozilgan XLSX import shabloni.
+      parameters:
+      - in: query
+        name: course_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: module_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - questions
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+          description: ''
   /api/v1/questions/summary:
     get:
       operationId: v1_questions_summary_retrieve
@@ -7945,6 +7999,37 @@ components:
       - type
       - updated_at
       - version
+    QuestionImportFileRequest:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
+          writeOnly: true
+          description: '`import-template` endpointidan olingan XLSX fayl.'
+      required:
+      - file
+    QuestionImportResponse:
+      type: object
+      properties:
+        created_count:
+          type: integer
+        course_id:
+          type: string
+          format: uuid
+        module_id:
+          type: string
+          format: uuid
+        question_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+      required:
+      - course_id
+      - created_count
+      - module_id
+      - question_ids
     QuestionList:
       type: object
       properties:
