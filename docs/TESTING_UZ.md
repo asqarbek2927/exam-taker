@@ -153,8 +153,8 @@ echo "$ACC" | python3 -m json.tool
 Tekshiring:
 
 - response `account`, top-level `temporary_password` va `temporary_password_expires_at`dan iborat;
-- `temporary_password` faqat shu create/reset javobida bir marta chiqadi;
-- `account.must_change_password=true`, `version=1`;
+- create response'idagi generatsiya qilingan parol muddatsiz, expiry `null` va faqat shu javobda ochiq chiqadi;
+- `account.must_change_password=true`, `version=1`; frontend birinchi kirishda almashtirishni majbur qiladi;
 - `password`, `course_ids`, `group_ids` yuborilsa `422`.
 - optional `avatar_url` public HTTP(S) rasmni backendga yuklatadi; local/private URL, noto‘g‘ri
   format yoki 5 MB dan katta rasm `422` qaytaradi.

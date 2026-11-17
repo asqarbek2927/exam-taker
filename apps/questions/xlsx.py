@@ -3,6 +3,7 @@
 import re
 from dataclasses import dataclass
 from io import BytesIO
+from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile
 
 from openpyxl import Workbook, load_workbook
@@ -63,33 +64,33 @@ def _add_example_rows(sheet) -> None:
         [
             1,
             "SINGLE_CHOICE",
-            "Python asoschisi kim?",
-            "Guido van Rossum",
-            "Elon Musk",
-            "Bill Gates",
-            "Linus Torvalds",
+            "Kuchli parol qaysi javobda to'g'ri ko'rsatilgan?",
+            "12345678",
+            "Azizbek2005",
+            "T7#mQ2!zLp9@",
+            "password",
             None,
             None,
-            "A",
+            "C",
             2,
         ],
         [
             2,
             "MULTIPLE_CHOICE",
-            "Qaysilari dasturlash tili?",
-            "Python",
-            "HTML",
-            "Java",
-            "CSS",
+            "Qaysilari phishing xabarining belgilaridir?",
+            "Shoshilinch havolani bosish talabi",
+            "Shubhali yoki xato yozilgan domen",
+            "Parolni yuborishni so'rash",
+            "Oldindan kelishilgan rasmiy xabar",
             None,
             None,
-            "A,C",
+            "A,B,C",
             3,
         ],
         [
             3,
             "TRUE_FALSE",
-            "Django Python framework hisoblanadi.",
+            "HTTPS internet orqali yuborilayotgan ma'lumotlarni shifrlaydi.",
             "To'g'ri",
             "Noto'g'ri",
             None,
@@ -99,7 +100,19 @@ def _add_example_rows(sheet) -> None:
             "A",
             1,
         ],
-        [4, "OPEN_ENDED", "HTTP nima?", None, None, None, None, None, None, None, 5],
+        [
+            4,
+            "OPEN_ENDED",
+            "Ikki faktorli autentifikatsiya nima va u nima uchun kerak?",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            5,
+        ],
     ]
     for row in rows:
         sheet.append(row)
@@ -145,12 +158,7 @@ def _correct_letters(value) -> set[str]:
     return {part for part in re.split(r"[,;\s]+", raw) if part}
 
 
-def parse_question_import(file_obj) -> ParsedQuestionWorkbook:
-    try:
-        workbook = load_workbook(file_obj, read_only=True, data_only=True)
-    except (BadZipFile, InvalidFileException, OSError, ValueError, KeyError) as exc:
-        raise QuestionXLSXError("Fayl yaroqli XLSX hujjat emas.") from exc
-
+def _parse_loaded_workbook(workbook) -> ParsedQuestionWorkbook:
     if INFO_SHEET not in workbook.sheetnames or QUESTIONS_SHEET not in workbook.sheetnames:
         raise QuestionXLSXError(
             "XLSX formati noto'g'ri. Shablonni `import-template` endpointidan yuklab oling."
@@ -221,3 +229,26 @@ def parse_question_import(file_obj) -> ParsedQuestionWorkbook:
         module_id=module_id,
         questions=questions,
     )
+
+
+def parse_question_import(file_obj) -> ParsedQuestionWorkbook:
+    workbook = None
+    try:
+        workbook = load_workbook(file_obj, read_only=True, data_only=True)
+        return _parse_loaded_workbook(workbook)
+    except QuestionXLSXError:
+        raise
+    except (
+        BadZipFile,
+        IndexError,
+        InvalidFileException,
+        KeyError,
+        OSError,
+        ParseError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        raise QuestionXLSXError("Fayl yaroqli XLSX hujjat emas.") from exc
+    finally:
+        if workbook is not None:
+            workbook.close()

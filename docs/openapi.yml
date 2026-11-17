@@ -4235,6 +4235,7 @@ components:
         temporary_password_expires_at:
           type: string
           format: date-time
+          nullable: true
       required:
       - account
       - temporary_password

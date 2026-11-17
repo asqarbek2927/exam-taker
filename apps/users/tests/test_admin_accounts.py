@@ -1,10 +1,8 @@
-from datetime import timedelta
 from io import BytesIO
 
 import pytest
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.utils import timezone
 from PIL import Image
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 
@@ -61,7 +59,9 @@ def test_admin_accounts_requires_super_admin(request, auth_client, fixture_name)
     assert response.status_code == 403
 
 
-def test_create_returns_one_time_credentials_and_audits(auth_client, admin):
+def test_create_returns_permanent_generated_credentials_and_audits(
+    auth_client, api_client, admin
+):
     response = auth_client(admin).post(ACCOUNTS, create_payload(), format="json")
     assert response.status_code == 201
     body = response.json()
@@ -69,13 +69,20 @@ def test_create_returns_one_time_credentials_and_audits(auth_client, admin):
     assert body["account"]["must_change_password"] is True
     assert body["account"]["version"] == 1
     assert body["temporary_password"]
-    assert body["temporary_password_expires_at"]
+    assert body["temporary_password_expires_at"] is None
 
     user = User.objects.get(pk=body["account"]["id"])
     assert user.check_password(body["temporary_password"])
     assert user.phone_number == "+998901234567"
     assert user.location == "Tashkent"
-    assert user.temporary_password_expires_at > timezone.now() + timedelta(hours=23)
+    assert user.temporary_password_expires_at is None
+    login = api_client.post(
+        "/api/v1/auth/login",
+        {"username": user.username, "password": body["temporary_password"]},
+        format="json",
+    )
+    assert login.status_code == 200
+    assert login.json()["must_change_password"] is True
     assert AuditLog.objects.filter(entity_id=user.pk, action=AuditAction.ACCOUNT_CREATED).exists()
 
 
@@ -211,9 +218,10 @@ def test_create_returns_top_level_temporary_password_for_every_role(auth_client,
     body = response.json()
     assert body["account"]["role"] == role
     assert body["temporary_password"]
-    assert body["temporary_password_expires_at"]
+    assert body["temporary_password_expires_at"] is None
     user = User.objects.get(pk=body["account"]["id"])
     assert user.check_password(body["temporary_password"])
+    assert user.must_change_password is True
 
 
 def test_create_rejects_password_and_assignment_fields(auth_client, admin):

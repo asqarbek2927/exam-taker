@@ -447,7 +447,7 @@ class AdminAccountCreateSerializer(serializers.Serializer):
 class AdminAccountCreateResponseSerializer(serializers.Serializer):
     account = AdminAccountDetailSerializer()
     temporary_password = serializers.CharField()
-    temporary_password_expires_at = serializers.DateTimeField()
+    temporary_password_expires_at = serializers.DateTimeField(allow_null=True)
 
 
 class AdminAccountUpdateSerializer(serializers.Serializer):

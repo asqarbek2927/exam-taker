@@ -180,9 +180,7 @@ def create_user(
                 phone_number=phone_number,
                 location=location,
                 must_change_password=generated_password is not None,
-                temporary_password_expires_at=(
-                    timezone.now() + timedelta(hours=24) if generated_password else None
-                ),
+                temporary_password_expires_at=None,
             )
             return user, generated_password
     except IntegrityError as exc:
@@ -258,7 +256,7 @@ def _record_account_audit(*, actor, action, user: User, metadata=None) -> None:
     )
 
 
-def create_admin_account(*, actor, **fields) -> tuple[User, str, datetime, datetime]:
+def create_admin_account(*, actor, **fields) -> tuple[User, str, datetime, datetime | None]:
     from apps.audit.choices import AuditAction
 
     remote_avatar_url = fields.pop("avatar_url", "")
@@ -273,7 +271,7 @@ def create_admin_account(*, actor, **fields) -> tuple[User, str, datetime, datet
                 stored_avatar_name = user.avatar.name
                 user.avatar_url = ""
                 user.save(update_fields=["avatar", "avatar_url", "updated_at"])
-            issued_at = user.temporary_password_expires_at - timedelta(hours=24)
+            issued_at = timezone.now()
             _record_account_audit(
                 actor=actor,
                 action=AuditAction.ACCOUNT_CREATED,

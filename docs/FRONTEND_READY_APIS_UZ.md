@@ -126,16 +126,21 @@ Create requestda password yuborilmaydi:
 qaytaradi. Private/local/reserved hostlar qabul qilinmaydi.
 
 Response'da `account`, top-level `temporary_password` va `temporary_password_expires_at` qaytadi.
-Parol faqat create yoki temporary-password response'ida bir marta chiqadi, 24 soat amal qiladi va
-login qilganda `must_change_password=true` qaytadi. Rollar: `TEACHER`, `SUPPORT_TEACHER`, `STUDENT`.
+Create response'idagi `temporary_password` nomi backward compatibility uchun saqlangan, lekin parol
+muddatsiz ishlaydi: expiry `null`. Birinchi login `must_change_password=true` qaytaradi va frontend
+parol almashtirish sahifasini majburiy ochishi kerak. Parol faqat create response'ida bir marta ochiq
+ko'rinadi. Rollar: `TEACHER`, `SUPPORT_TEACHER`, `STUDENT`.
 
 ```json
 {
   "account": {"id":"uuid","email":"madina@example.com","role":"STUDENT"},
   "temporary_password":"generated-password",
-  "temporary_password_expires_at":"2026-10-31T12:00:00+05:00"
+  "temporary_password_expires_at":null
 }
 ```
+
+Adminning alohida `POST /admin/accounts/{id}/temporary-password` reset endpointi bergan parol esa
+24 soatlik bo'lib qoladi va `must_change_password=true` qiladi.
 
 Eski `/users` operatsiyalari olib tashlangan. Account boshqaruvi uchun faqat
 `/admin/accounts` kontrakti ishlatiladi.

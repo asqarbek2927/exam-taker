@@ -97,6 +97,61 @@ def test_imports_single_choice_from_xlsx(auth_client, import_ctx):
     ]
 
 
+def test_imports_all_supported_question_types(auth_client, import_ctx):
+    upload = xlsx_upload(
+        import_ctx,
+        [1, "SINGLE_CHOICE", "Single", "A", "B", None, None, None, None, "A", 2],
+        [
+            2,
+            "MULTIPLE_CHOICE",
+            "Multiple",
+            "A",
+            "B",
+            "C",
+            None,
+            None,
+            None,
+            "A,C",
+            3,
+        ],
+        [
+            3,
+            "TRUE_FALSE",
+            "True or false",
+            "To'g'ri",
+            "Noto'g'ri",
+            None,
+            None,
+            None,
+            None,
+            "B",
+            1,
+        ],
+        [4, "OPEN_ENDED", "Open", None, None, None, None, None, None, None, 5],
+    )
+
+    response = auth_client(import_ctx["teacher"]).post(
+        f"{QUESTIONS}/import", {"file": upload}, format="multipart"
+    )
+
+    assert response.status_code == 201, response.json()
+    assert response.json()["created_count"] == 4
+    questions = {
+        question.text: question for question in Question.objects.prefetch_related("options")
+    }
+    assert questions["Single"].type == "SINGLE_CHOICE"
+    assert questions["Multiple"].type == "MULTIPLE_CHOICE"
+    assert questions["True or false"].type == "TRUE_FALSE"
+    assert questions["Open"].type == "OPEN_ENDED"
+    assert set(
+        questions["Multiple"].options.filter(is_correct=True).values_list("text", flat=True)
+    ) == {"A", "C"}
+    assert list(
+        questions["True or false"].options.filter(is_correct=True).values_list("text", flat=True)
+    ) == ["Noto'g'ri"]
+    assert not questions["Open"].options.exists()
+
+
 def test_invalid_row_rejects_whole_xlsx(auth_client, import_ctx):
     upload = xlsx_upload(
         import_ctx,
@@ -123,6 +178,25 @@ def test_teacher_cannot_use_template_for_unassigned_course(auth_client, import_c
     )
 
     assert response.status_code == 403
+
+
+def test_teacher_cannot_import_into_unassigned_course(auth_client, import_ctx):
+    foreign_course = CourseFactory()
+    foreign_ctx = {
+        "course": foreign_course,
+        "module": ModuleFactory(course=foreign_course),
+    }
+    upload = xlsx_upload(
+        foreign_ctx,
+        [1, "SINGLE_CHOICE", "Forbidden", "A", "B", None, None, None, None, "A", 2],
+    )
+
+    response = auth_client(import_ctx["teacher"]).post(
+        f"{QUESTIONS}/import", {"file": upload}, format="multipart"
+    )
+
+    assert response.status_code == 403
+    assert Question.objects.count() == 0
 
 
 def test_rejects_non_xlsx_file(auth_client, import_ctx):
