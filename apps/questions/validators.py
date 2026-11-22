@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from .choices import QuestionType
+from .choices import MANUAL_GRADED_TYPES, QuestionType
 
 MIN_CHOICE_OPTIONS = 2
 
@@ -16,9 +16,9 @@ def validate_options(question_type: str, options: Sequence[dict]) -> list[str]:
     total = len(options)
     correct = sum(1 for option in options if option.get("is_correct"))
 
-    if question_type == QuestionType.OPEN_ENDED:
+    if question_type in MANUAL_GRADED_TYPES:
         if total:
-            errors.append("OPEN_ENDED savolda optionlar bo‘lmasligi kerak.")
+            errors.append(f"{question_type} savolda optionlar bo‘lmasligi kerak.")
         return errors
 
     texts = [str(option.get("text", "")).strip().casefold() for option in options]

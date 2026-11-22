@@ -8196,12 +8196,14 @@ components:
       - MULTIPLE_CHOICE
       - TRUE_FALSE
       - OPEN_ENDED
+      - PYTHON_CODE
       type: string
       description: |-
         * `SINGLE_CHOICE` - Single choice
         * `MULTIPLE_CHOICE` - Multiple choice
         * `TRUE_FALSE` - True / False
         * `OPEN_ENDED` - Open ended
+        * `PYTHON_CODE` - Python code
     QuestionTypeStatistics:
       type: object
       properties:

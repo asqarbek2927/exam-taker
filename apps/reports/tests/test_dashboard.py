@@ -92,6 +92,7 @@ def test_empty_state_returns_zeros_and_nulls(auth_client, admin, teacher, studen
                 },
                 {"type": "TRUE_FALSE", "label": "True / False", "count": 0, "percentage": 0.0},
                 {"type": "OPEN_ENDED", "label": "Open ended", "count": 0, "percentage": 0.0},
+                {"type": "PYTHON_CODE", "label": "Python code", "count": 0, "percentage": 0.0},
             ],
         },
         "course_overview": [],
@@ -345,6 +346,7 @@ def test_admin_question_statistics(auth_client, admin):
                 "percentage": 25.0,
             },
             {"type": "OPEN_ENDED", "label": "Open ended", "count": 0, "percentage": 0.0},
+            {"type": "PYTHON_CODE", "label": "Python code", "count": 0, "percentage": 0.0},
         ],
     }
 

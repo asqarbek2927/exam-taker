@@ -8,6 +8,12 @@ class QuestionType(models.TextChoices):
     MULTIPLE_CHOICE = "MULTIPLE_CHOICE", "Multiple choice"
     TRUE_FALSE = "TRUE_FALSE", "True / False"
     OPEN_ENDED = "OPEN_ENDED", "Open ended"
+    PYTHON_CODE = "PYTHON_CODE", "Python code"
+
+
+# Optionsiz, `text_answer` bilan javob beriladigan va faqat qo‘lda baholanadigan turlar.
+# PYTHON_CODE kodi serverda ishga tushirilmaydi — faqat matn sifatida saqlanadi.
+MANUAL_GRADED_TYPES = frozenset({QuestionType.OPEN_ENDED, QuestionType.PYTHON_CODE})
 
 
 class QuestionStatus(models.TextChoices):
@@ -28,4 +34,5 @@ DEFAULT_POINTS = {
     QuestionType.MULTIPLE_CHOICE: Decimal("3"),
     QuestionType.TRUE_FALSE: Decimal("1"),
     QuestionType.OPEN_ENDED: Decimal("5"),
+    QuestionType.PYTHON_CODE: Decimal("5"),
 }

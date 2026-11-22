@@ -26,7 +26,7 @@ from apps.assignments.snapshots import ensure_assignment_snapshot
 from apps.audit.choices import AuditAction
 from apps.audit.services import record_audit
 from apps.exams.models import ExamQuestion
-from apps.questions.choices import QuestionType
+from apps.questions.choices import MANUAL_GRADED_TYPES, QuestionType
 from apps.users.choices import UserStatus
 from common.exceptions import AccessDeniedError, BusinessRuleError, ConflictError
 
@@ -155,7 +155,7 @@ def _finalize(attempt: ExamAttempt, *, submitted_at: datetime, reason: str) -> E
             answer = StudentAnswer(attempt=attempt, exam_question=exam_question, text_answer="")
 
         question = exam_question.question
-        if question.type == QuestionType.OPEN_ENDED:
+        if question.type in MANUAL_GRADED_TYPES:
             if answer.text_answer.strip():
                 answer.is_correct, answer.points_awarded = None, None  # manual baholanadi
             else:
@@ -205,7 +205,7 @@ def _finalize_snapshot_attempt(
                 text_answer="",
             )
 
-        if snapshot_question.type == QuestionType.OPEN_ENDED:
+        if snapshot_question.type in MANUAL_GRADED_TYPES:
             if answer.text_answer.strip():
                 answer.is_correct, answer.points_awarded = None, None
             else:
@@ -484,11 +484,11 @@ def _store_answer(
     snapshot_question = attempt_question.snapshot_question
 
     chosen: list = []
-    if snapshot_question.type == QuestionType.OPEN_ENDED:
+    if snapshot_question.type in MANUAL_GRADED_TYPES:
         if option_ids:
-            raise BusinessRuleError("OPEN_ENDED savolga `option_ids` yuborilmaydi.")
+            raise BusinessRuleError(f"{snapshot_question.type} savolga `option_ids` yuborilmaydi.")
         if text_answer is None:
-            raise BusinessRuleError("OPEN_ENDED savol uchun `text_answer` majburiy.")
+            raise BusinessRuleError(f"{snapshot_question.type} savol uchun `text_answer` majburiy.")
     else:
         if text_answer is not None:
             raise BusinessRuleError("Tanlovli savolga `text_answer` yuborilmaydi.")
@@ -604,7 +604,7 @@ def submit_attempt(*, student, attempt_id) -> ExamAttempt:
 def grade_answer(
     *, grader, answer: StudentAnswer, points_awarded: Decimal, teacher_feedback: str | None = None
 ) -> tuple[StudentAnswer, ExamAttempt]:
-    """OPEN_ENDED javobni qo‘lda baholaydi va attempt natijasini qayta hisoblaydi.
+    """OPEN_ENDED / PYTHON_CODE javobni qo‘lda baholaydi va attempt natijasini qayta hisoblaydi.
 
     `answer` view tomonidan allaqachon ruxsat tekshiruvidan o‘tgan (queryset scoping).
     Attempt qatori qulflanadi — bir vaqtda ikki teacher baholasa ham natija izchil bo‘ladi.
@@ -625,8 +625,8 @@ def grade_answer(
         )
         question_type = exam_question.question.type
         max_points = exam_question.points
-    if question_type != QuestionType.OPEN_ENDED:
-        raise BusinessRuleError("Faqat OPEN_ENDED savollar qo‘lda baholanadi.")
+    if question_type not in MANUAL_GRADED_TYPES:
+        raise BusinessRuleError("Faqat OPEN_ENDED va PYTHON_CODE savollar qo‘lda baholanadi.")
     points = money(points_awarded)
     if points < 0 or points > max_points:
         raise BusinessRuleError(f"Ball 0 dan {exam_question.points} gacha bo‘lishi kerak.")

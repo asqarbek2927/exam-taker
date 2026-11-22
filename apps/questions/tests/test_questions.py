@@ -57,6 +57,7 @@ def payload(ctx, **overrides):
             1,
         ),
         ("OPEN_ENDED", [], 5),
+        ("PYTHON_CODE", [], 5),
     ],
 )
 def test_create_each_type_uses_default_points(
@@ -116,6 +117,36 @@ def test_create_rejects_options_for_open_ended(auth_client, ctx):
         QUESTIONS, payload(ctx, type="OPEN_ENDED"), format="json"
     )
     assert response.status_code == 422
+
+
+def test_create_rejects_options_for_python_code(auth_client, ctx):
+    response = auth_client(ctx["teacher"]).post(
+        QUESTIONS, payload(ctx, type="PYTHON_CODE"), format="json"
+    )
+    assert response.status_code == 422
+    assert Question.objects.count() == 0
+
+
+def test_python_code_question_requires_prompt_and_keeps_type(auth_client, ctx):
+    client = auth_client(ctx["teacher"])
+    empty = client.post(
+        QUESTIONS, payload(ctx, type="PYTHON_CODE", text="", options=[]), format="json"
+    )
+    assert empty.status_code == 422
+
+    created = client.post(
+        QUESTIONS,
+        payload(ctx, type="PYTHON_CODE", text="Write Python that prints 5", options=[]),
+        format="json",
+    )
+    assert created.status_code == 201
+    body = created.json()
+    assert body["type"] == "PYTHON_CODE"
+    assert body["options"] == []
+    detail = client.get(f"{QUESTIONS}/{body['id']}").json()
+    assert detail["type"] == "PYTHON_CODE"
+    listed = client.get(QUESTIONS, {"type": "PYTHON_CODE"}).json()["data"]
+    assert [item["id"] for item in listed] == [body["id"]]
 
 
 def test_create_validation_of_basic_fields(auth_client, ctx):
