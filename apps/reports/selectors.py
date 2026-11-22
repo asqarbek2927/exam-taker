@@ -370,9 +370,7 @@ def dashboard_comparison(now: datetime, days: int = 30) -> dict:
         status__in=[UserStatus.ACTIVE, UserStatus.INACTIVE],
     )
     student_counts = students.aggregate(
-        current=Count(
-            "pk", filter=Q(created_at__gte=current_start, created_at__lte=now)
-        ),
+        current=Count("pk", filter=Q(created_at__gte=current_start, created_at__lte=now)),
         previous=Count(
             "pk", filter=Q(created_at__gte=previous_start, created_at__lt=current_start)
         ),
@@ -391,9 +389,7 @@ def dashboard_comparison(now: datetime, days: int = 30) -> dict:
         percentage__isnull=False,
     )
     score_averages = graded.aggregate(
-        current=Avg(
-            "percentage", filter=Q(submitted_at__gte=current_start, submitted_at__lte=now)
-        ),
+        current=Avg("percentage", filter=Q(submitted_at__gte=current_start, submitted_at__lte=now)),
         previous=Avg(
             "percentage",
             filter=Q(submitted_at__gte=previous_start, submitted_at__lt=current_start),
@@ -625,13 +621,9 @@ def _teacher_assignments(teacher, now: datetime) -> QuerySet[ExamAssignment]:
     return with_effective_status(staff_visible(teacher).filter(is_archived=False), now)
 
 
-def _teacher_upcoming_exams(
-    assignments: QuerySet[ExamAssignment], limit: int = 5
-) -> list[dict]:
+def _teacher_upcoming_exams(assignments: QuerySet[ExamAssignment], limit: int = 5) -> list[dict]:
     assignments = (
-        assignments.filter(
-            effective_status__in=[EffectiveStatus.ACTIVE, EffectiveStatus.SCHEDULED]
-        )
+        assignments.filter(effective_status__in=[EffectiveStatus.ACTIVE, EffectiveStatus.SCHEDULED])
         .select_related("exam__course")
         .annotate(students_count=Count("recipients", distinct=True))
         .prefetch_related("assignment_groups__group")
@@ -778,9 +770,7 @@ def teacher_dashboard(teacher, now: datetime | None = None) -> dict:
         "my_exams": Exam.objects.filter(created_by=teacher)
         .exclude(status=ExamStatus.ARCHIVED)
         .count(),
-        "active_assignments": assignments.filter(
-            effective_status=EffectiveStatus.ACTIVE
-        ).count(),
+        "active_assignments": assignments.filter(effective_status=EffectiveStatus.ACTIVE).count(),
         "pending_grading": attempts.filter(status=AttemptStatus.PENDING_GRADING).count(),
         "average_student_score": average,
         "upcoming_exams": _teacher_upcoming_exams(assignments),
@@ -983,8 +973,7 @@ def student_dashboard(student, now: datetime | None = None) -> dict:
     )
     assignments = student_assignments(student, now)
     available = (
-        assignments
-        .filter(effective_status=EffectiveStatus.ACTIVE)
+        assignments.filter(effective_status=EffectiveStatus.ACTIVE)
         .filter(
             Q(active_attempt_id__isnull=False)
             | Q(max_attempts__isnull=True)

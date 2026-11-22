@@ -324,20 +324,14 @@ def _check_editable_after_attempts(assignment: ExamAssignment, fields: dict) -> 
 
     def field_changed(name: str, value) -> bool:
         if name == "groups":
-            current = set(
-                assignment.assignment_groups.values_list("group_id", flat=True)
-            )
+            current = set(assignment.assignment_groups.values_list("group_id", flat=True))
             return current != relation_ids(value)
         if name == "students":
-            current = set(
-                assignment.assignment_students.values_list("student_id", flat=True)
-            )
+            current = set(assignment.assignment_students.values_list("student_id", flat=True))
             return current != relation_ids(value)
         return getattr(assignment, name) != value
 
-    changed_fields = {
-        name for name, value in fields.items() if field_changed(name, value)
-    }
+    changed_fields = {name for name, value in fields.items() if field_changed(name, value)}
     if "max_attempts" in changed_fields:
         current_limit = assignment.max_attempts
         new_limit = fields["max_attempts"]

@@ -315,9 +315,10 @@ def update_admin_account(*, user: User, actor, expected_version: int, **fields) 
         with transaction.atomic():
             user.save(update_fields=update_fields)
     except IntegrityError as exc:
-        if "username" in changed and User.objects.filter(
-            username__iexact=user.username
-        ).exclude(pk=user.pk).exists():
+        if (
+            "username" in changed
+            and User.objects.filter(username__iexact=user.username).exclude(pk=user.pk).exists()
+        ):
             raise ConflictError(USERNAME_TAKEN) from exc
         raise ConflictError(EMAIL_TAKEN) from exc
     if "avatar" in changed and old_avatar_name and old_avatar_name != user.avatar.name:

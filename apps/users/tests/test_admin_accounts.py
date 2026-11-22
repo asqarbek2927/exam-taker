@@ -59,9 +59,7 @@ def test_admin_accounts_requires_super_admin(request, auth_client, fixture_name)
     assert response.status_code == 403
 
 
-def test_create_returns_permanent_generated_credentials_and_audits(
-    auth_client, api_client, admin
-):
+def test_create_returns_permanent_generated_credentials_and_audits(auth_client, api_client, admin):
     response = auth_client(admin).post(ACCOUNTS, create_payload(), format="json")
     assert response.status_code == 201
     body = response.json()
@@ -476,9 +474,7 @@ def test_patch_rejects_duplicate_email(auth_client, admin, teacher):
     assert "email" in response.json()["errors"]
 
 
-def test_create_and_patch_reject_duplicate_username_case_insensitively(
-    auth_client, admin, teacher
-):
+def test_create_and_patch_reject_duplicate_username_case_insensitively(auth_client, admin, teacher):
     client = auth_client(admin)
     create = client.post(
         ACCOUNTS,
