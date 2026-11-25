@@ -1,14 +1,25 @@
 import re
 
+from django.conf import settings
 from django.contrib.auth import password_validation
 from django.contrib.auth.models import update_last_login
+from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.exceptions import (
+    InvalidToken,
+    TokenBackendError,
+    TokenBackendExpiredToken,
+    TokenError,
+)
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.settings import api_settings as jwt_settings
+from rest_framework_simplejwt.state import token_backend
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .choices import (
@@ -690,15 +701,54 @@ class LoginSerializer(serializers.Serializer):
         }
 
 
+REFRESH_GRACE_CACHE_PREFIX = "auth:refresh-grace:"
+
+
+def _refresh_grace_seconds() -> int:
+    return int(getattr(settings, "JWT_REFRESH_GRACE_SECONDS", 0))
+
+
+def _decode_refresh_payload(raw_token: str) -> dict:
+    """Imzo, muddat va token turini tekshiradi; blacklist'ni TEKSHIRMAYDI.
+
+    Blacklist tekshiruvi `RefreshSerializer.validate` ichida, qulf ostida bajariladi.
+    """
+    try:
+        payload = token_backend.decode(raw_token, verify=True)
+    except TokenBackendExpiredToken as exc:
+        raise InvalidToken("Token is expired") from exc
+    except TokenBackendError as exc:
+        raise InvalidToken("Token is invalid") from exc
+    if payload.get(jwt_settings.TOKEN_TYPE_CLAIM) != RefreshToken.token_type:
+        raise InvalidToken("Token has wrong type")
+    if not payload.get(jwt_settings.JTI_CLAIM):
+        raise InvalidToken("Token has no id")
+    return payload
+
+
+def _is_blacklisted(jti: str) -> bool:
+    return BlacklistedToken.objects.filter(token__jti=jti).exists()
+
+
+# Refresh token rotation + qisqa "grace" oynasi.
+#
+# Muammo: access token tugaganda front bir nechta parallel so‘rov (autosave, events, ...)
+# uchun bir vaqtda refresh yuboradi. Rotation birinchi so‘rovda eski refresh tokenni
+# blacklist qiladi va qolganlari 401 oladi — front studentni logout qiladi.
+#
+# Yechim: muvaffaqiyatli rotation natijasi eski token `jti`si bo‘yicha
+# `JWT_REFRESH_GRACE_SECONDS` ga cache'da saqlanadi. Shu oynada eski token qayta kelsa,
+# YANGI token yaratilmaydi — o‘sha juftlik qaytariladi. Logout / parol almashtirish
+# bilan bekor qilingan tokenlarga grace berilmaydi (cache yozuvi faqat rotation'da
+# yaratiladi, qaytariladigan yangi refresh token ham blacklist'da bo‘lmasligi shart).
+# Parallel so‘rovlar `OutstandingToken` qatori qulfi bilan ketma-ketlashtiriladi.
 class RefreshSerializer(serializers.Serializer):
     refresh_token = serializers.CharField()
 
     def validate(self, attrs):
-        try:
-            token = RefreshToken(attrs["refresh_token"])
-        except TokenError as exc:
-            raise InvalidToken(exc.args[0]) from exc
-        user = User.objects.filter(pk=token.payload.get("user_id")).first()
+        raw_token = attrs["refresh_token"]
+        payload = _decode_refresh_payload(raw_token)
+        user = User.objects.filter(pk=payload.get(jwt_settings.USER_ID_CLAIM)).first()
         if user is None or not user.is_active:
             raise AuthenticationFailed("Akkaunt topilmadi yoki faol emas.")
         if (
@@ -707,16 +757,50 @@ class RefreshSerializer(serializers.Serializer):
             and user.temporary_password_expires_at <= timezone.now()
         ):
             raise AuthenticationFailed("Vaqtinchalik parol muddati tugagan.")
-        inner = TokenRefreshSerializer(data={"refresh": attrs["refresh_token"]})
-        try:
-            inner.is_valid(raise_exception=True)
-        except TokenError as exc:
-            raise InvalidToken(exc.args[0]) from exc
-        except AuthenticationFailed as exc:
-            raise AuthenticationFailed("Akkaunt topilmadi yoki faol emas.") from exc
-        data = inner.validated_data
-        # ROTATE_REFRESH_TOKENS=True bo‘lgani uchun `refresh` har doim qaytadi.
-        return {"access_token": data["access"], "refresh_token": data.get("refresh")}
+
+        jti = payload[jwt_settings.JTI_CLAIM]
+        cache_key = f"{REFRESH_GRACE_CACHE_PREFIX}{jti}"
+        grace_seconds = _refresh_grace_seconds()
+        with transaction.atomic():
+            # Bir xil token bilan kelgan parallel so‘rovlar shu yerda navbatga turadi.
+            list(
+                OutstandingToken.objects.select_for_update()
+                .filter(jti=jti)
+                .order_by()  # Meta.ordering (user) — outer join, FOR UPDATE bilan ishlamaydi
+                .values_list("pk", flat=True)
+            )
+
+            if grace_seconds > 0:
+                cached = cache.get(cache_key)
+                if cached is not None:
+                    return self._from_grace(cached, user)
+
+            if _is_blacklisted(jti):
+                raise InvalidToken("Token is blacklisted")
+
+            inner = TokenRefreshSerializer(data={"refresh": raw_token})
+            try:
+                inner.is_valid(raise_exception=True)
+            except TokenError as exc:
+                raise InvalidToken(exc.args[0]) from exc
+            except AuthenticationFailed as exc:
+                raise AuthenticationFailed("Akkaunt topilmadi yoki faol emas.") from exc
+            data = inner.validated_data
+            # ROTATE_REFRESH_TOKENS=True bo‘lgani uchun `refresh` har doim qaytadi.
+            result = {"access_token": data["access"], "refresh_token": data.get("refresh")}
+            if grace_seconds > 0 and result["refresh_token"]:
+                cache.set(cache_key, {"user_id": str(user.pk), **result}, grace_seconds)
+            return result
+
+    @staticmethod
+    def _from_grace(cached: dict, user) -> dict:
+        if cached.get("user_id") != str(user.pk):
+            raise InvalidToken("Token is invalid")
+        new_payload = _decode_refresh_payload(cached["refresh_token"])
+        # Yangi token keyin logout / parol almashtirish bilan bekor qilingan bo‘lishi mumkin.
+        if _is_blacklisted(new_payload[jwt_settings.JTI_CLAIM]):
+            raise InvalidToken("Token is blacklisted")
+        return {"access_token": cached["access_token"], "refresh_token": cached["refresh_token"]}
 
 
 class LogoutSerializer(serializers.Serializer):

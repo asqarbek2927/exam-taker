@@ -32,6 +32,8 @@ REST_FRAMEWORK = {
         "user": "10000/min",
         "login": "10000/min",
         "login_ip": "10000/min",
+        "refresh": "10000/min",
+        "refresh_ip": "10000/min",
     },
 }
 

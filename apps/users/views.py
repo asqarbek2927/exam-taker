@@ -17,7 +17,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from common.constants import UUID_REGEX
 from common.exceptions import BusinessRuleError
 from common.permissions import IsSuperAdmin
-from common.throttling import LoginIPRateThrottle, LoginRateThrottle
+from common.throttling import (
+    LoginIPRateThrottle,
+    LoginRateThrottle,
+    RefreshIPRateThrottle,
+    RefreshUserRateThrottle,
+)
 
 from . import selectors, services
 from .choices import UserRole, UserStatus
@@ -92,7 +97,7 @@ class LoginView(PublicAuthView):
     auth=[],
 )
 class RefreshView(PublicAuthView):
-    throttle_classes = [LoginIPRateThrottle]
+    throttle_classes = [RefreshUserRateThrottle, RefreshIPRateThrottle]
 
     def post(self, request):
         serializer = RefreshSerializer(data=request.data)

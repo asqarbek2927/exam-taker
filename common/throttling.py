@@ -47,3 +47,47 @@ class LoginIPRateThrottle(SimpleRateThrottle):
 
     def get_cache_key(self, request, view):
         return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
+
+
+# --------------------------------------------------------------------------
+# Refresh token
+# --------------------------------------------------------------------------
+# Bitta sinf (NAT IP) dagi hamma studentning access tokeni bir daqiqada tugaydi va
+# ular bir vaqtda refresh qiladi. Shuning uchun refresh uchun asosiy limit — user
+# bo‘yicha, IP limiti esa faqat ommaviy hujumga qarshi keng chegara.
+def _refresh_identifier_from(request) -> str:
+    try:
+        data = request.data
+    except ParseError:
+        return ""
+    raw = data.get("refresh_token") if hasattr(data, "get") else None
+    if not isinstance(raw, str) or not raw:
+        return ""
+    from rest_framework_simplejwt.exceptions import TokenBackendError
+    from rest_framework_simplejwt.settings import api_settings as jwt_settings
+    from rest_framework_simplejwt.state import token_backend
+
+    try:
+        # Faqat throttle kaliti uchun: imzo bu yerda tekshirilmaydi (serializer tekshiradi).
+        payload = token_backend.decode(raw, verify=False)
+        user_id = payload.get(jwt_settings.USER_ID_CLAIM)
+    except TokenBackendError:  # buzuq token: hash bo‘yicha cheklanadi
+        user_id = None
+    if user_id:
+        return f"user:{user_id}"
+    return "token:" + hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+class RefreshUserRateThrottle(SimpleRateThrottle):
+    scope = "refresh"
+
+    def get_cache_key(self, request, view):
+        ident = _refresh_identifier_from(request) or f"ip:{self.get_ident(request)}"
+        return self.cache_format % {"scope": self.scope, "ident": ident}
+
+
+class RefreshIPRateThrottle(SimpleRateThrottle):
+    scope = "refresh_ip"
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}

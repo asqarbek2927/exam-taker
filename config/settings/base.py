@@ -156,6 +156,8 @@ REST_FRAMEWORK = {
         "user": "600/min",
         "login": "5/min",  # (IP + username/email) bo‘yicha
         "login_ip": "120/min",  # faqat IP bo‘yicha
+        "refresh": "30/min",  # user bo‘yicha (refresh token egasi)
+        "refresh_ip": "1000/min",  # faqat IP bo‘yicha (NAT ortidagi butun sinf)
     },
     # Nginx/Load balancer orqasida: 1. To‘g‘ridan-to‘g‘ri: 0.
     "NUM_PROXIES": env.int("NUM_PROXIES", default=0),
@@ -169,6 +171,11 @@ SIMPLE_JWT = {
     "UPDATE_LAST_LOGIN": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
+
+# Rotation qilingan (eski) refresh token shuncha soniya ichida qayta kelsa, 401 o‘rniga
+# o‘sha yangi juftlik qaytariladi — front parallel refresh qilganda studentni logout
+# qilmasligi uchun. 0 — o‘chirilgan (har bir eski token darhol 401).
+JWT_REFRESH_GRACE_SECONDS = env.int("JWT_REFRESH_GRACE_SECONDS", default=60)
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "ExamTaker API",

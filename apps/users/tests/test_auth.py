@@ -281,7 +281,10 @@ def test_refresh_rotates_and_blacklists_old_token(api_client, teacher):
     assert body["access_token"]
     assert body["refresh_token"] and body["refresh_token"] != old_refresh
 
-    # Eski refresh token qayta ishlatib bo‘lmaydi.
+    # Grace oynasi tugagach eski refresh token qayta ishlatib bo‘lmaydi.
+    from django.core.cache import cache
+
+    cache.clear()
     reuse = api_client.post(REFRESH, {"refresh_token": old_refresh}, format="json")
     assert reuse.status_code == 401
 
