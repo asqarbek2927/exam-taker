@@ -1,0 +1,7 @@
+{
+  "exam_question_id": "string",
+  "option_ids": [],
+  "revision": "number",
+  "text_answer": "string",
+  "updated_at": "string"
+}

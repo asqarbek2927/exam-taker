@@ -1,0 +1,12 @@
+{
+  "access_token": "string",
+  "must_change_password": "bool",
+  "refresh_token": "string",
+  "user": {
+    "email": "string",
+    "full_name": "string",
+    "id": "string",
+    "role": "string",
+    "username": "string"
+  }
+}

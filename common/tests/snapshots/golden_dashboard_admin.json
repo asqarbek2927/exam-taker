@@ -1,0 +1,145 @@
+{
+  "active_assignments": "number",
+  "active_courses": "number",
+  "average_score": "number",
+  "comparison": {
+    "average_score": {
+      "change_points": "null",
+      "current_period": "number",
+      "previous_period": "null"
+    },
+    "current_period": {
+      "end_at": "string",
+      "start_at": "string"
+    },
+    "period_days": "number",
+    "previous_period": {
+      "end_at": "string",
+      "start_at": "string"
+    },
+    "student_registrations": {
+      "change_percentage": "null",
+      "current_period": "number",
+      "previous_period": "number"
+    }
+  },
+  "completed_assignments": "number",
+  "course_overview": [
+    {
+      "average_score": "number",
+      "course_id": "string",
+      "course_name": "string",
+      "exams_count": "number",
+      "students_count": "number"
+    }
+  ],
+  "exam_activity": {
+    "change_percentage": "null",
+    "current_total": "number",
+    "items": [
+      {
+        "completed_attempts": "number",
+        "date": "string"
+      }
+    ],
+    "period_days": "number",
+    "previous_items": [
+      {
+        "completed_attempts": "number",
+        "date": "string"
+      }
+    ],
+    "previous_total": "number"
+  },
+  "exam_statistics": {
+    "assigned_recipients": "number",
+    "average_score": "number",
+    "completed_attempts": "number",
+    "completed_recipients": "number",
+    "completion_rate": "null",
+    "graded_attempts": "number",
+    "on_time_submission_rate": "number",
+    "on_time_submissions": "number",
+    "pass_rate": "number",
+    "passed_attempts": "number",
+    "tracked_submissions": "number"
+  },
+  "pass_rate": "number",
+  "platform_activity": [
+    {
+      "description": "string",
+      "occurred_at": "string",
+      "title": "string",
+      "type": "string"
+    }
+  ],
+  "question_statistics": {
+    "total_questions": "number",
+    "types": [
+      {
+        "count": "number",
+        "label": "string",
+        "percentage": "number",
+        "type": "string"
+      }
+    ],
+    "used_in_exams": "number",
+    "used_in_exams_percentage": "number"
+  },
+  "recent_exams": [
+    {
+      "course_id": "string",
+      "course_name": "string",
+      "created_at": "string",
+      "created_by_id": "string",
+      "created_by_name": "string",
+      "id": "string",
+      "status": "string",
+      "title": "string"
+    }
+  ],
+  "recent_results": [
+    {
+      "attempt_id": "string",
+      "course_name": "string",
+      "exam_title": "string",
+      "passed": "bool",
+      "percentage": "number",
+      "student_avatar_url": "string",
+      "student_id": "string",
+      "student_name": "string",
+      "submitted_at": "string"
+    }
+  ],
+  "summary": {
+    "courses": {
+      "active": "number",
+      "total": "number"
+    },
+    "exams": {
+      "active_assignments": "number",
+      "total": "number"
+    },
+    "questions": {
+      "added_this_month": "number",
+      "total": "number"
+    },
+    "students": {
+      "added_this_month": "number",
+      "total": "number"
+    },
+    "teachers": {
+      "added_this_month": "number",
+      "total": "number"
+    },
+    "upcoming_assignments": {
+      "next_7_days": "number"
+    }
+  },
+  "total_courses": "number",
+  "total_exams": "number",
+  "total_modules": "number",
+  "total_questions": "number",
+  "total_students": "number",
+  "total_teachers": "number"
+}

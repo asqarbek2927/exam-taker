@@ -1,0 +1,17 @@
+{
+  "answer_review_released": "bool",
+  "assignment_id": "string",
+  "attempt_number": "number",
+  "exam_id": "string",
+  "exam_title": "string",
+  "finalization_reason": "string",
+  "focus_violations": "number",
+  "id": "string",
+  "passed": "null",
+  "percentage": "null",
+  "review_mode": "string",
+  "score": "null",
+  "started_at": "string",
+  "status": "string",
+  "submitted_at": "string"
+}

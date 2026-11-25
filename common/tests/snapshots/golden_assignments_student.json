@@ -1,0 +1,34 @@
+{
+  "data": [
+    {
+      "active_attempt_id": "null",
+      "answer_review_released": "bool",
+      "attempts_remaining": "number",
+      "attempts_used": "number",
+      "availability_type": "string",
+      "can_start": "bool",
+      "course": {
+        "id": "string",
+        "name": "string",
+        "status": "string"
+      },
+      "duration_minutes": "number",
+      "end_at": "string",
+      "exam_id": "string",
+      "exam_title": "string",
+      "id": "string",
+      "max_attempts": "number",
+      "questions_count": "number",
+      "result_review_mode": "string",
+      "start_at": "string",
+      "status": "string",
+      "total_points": "number"
+    }
+  ],
+  "pagination": {
+    "limit": "number",
+    "page": "number",
+    "total": "number",
+    "total_pages": "number"
+  }
+}

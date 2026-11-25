@@ -1,0 +1,30 @@
+{
+  "assignment_id": "string",
+  "attempt_number": "number",
+  "deadline_at": "string",
+  "duration_minutes": "number",
+  "exam_id": "string",
+  "exam_title": "string",
+  "focus_violations": "number",
+  "id": "string",
+  "questions": [
+    {
+      "answer": "null",
+      "id": "string",
+      "options": [
+        {
+          "id": "string",
+          "text": "string"
+        }
+      ],
+      "points": "number",
+      "position": "number",
+      "question_id": "string",
+      "text": "string",
+      "type": "string"
+    }
+  ],
+  "server_now": "string",
+  "started_at": "string",
+  "status": "string"
+}

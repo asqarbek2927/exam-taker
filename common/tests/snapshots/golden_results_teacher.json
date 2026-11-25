@@ -1,0 +1,39 @@
+{
+  "data": [
+    {
+      "assignment_id": "string",
+      "attempt_number": "number",
+      "audience_type": "string",
+      "course": {
+        "id": "string",
+        "name": "string",
+        "status": "string"
+      },
+      "exam_id": "string",
+      "exam_title": "string",
+      "groups": [],
+      "id": "string",
+      "is_latest": "bool",
+      "passed": "bool",
+      "percentage": "number",
+      "score": "number",
+      "started_at": "string",
+      "status": "string",
+      "student": {
+        "email": "string",
+        "full_name": "string",
+        "id": "string",
+        "role": "string",
+        "username": "string"
+      },
+      "student_avatar_url": "string",
+      "submitted_at": "string"
+    }
+  ],
+  "pagination": {
+    "limit": "number",
+    "page": "number",
+    "total": "number",
+    "total_pages": "number"
+  }
+}

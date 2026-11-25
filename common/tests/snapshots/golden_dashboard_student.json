@@ -1,0 +1,52 @@
+{
+  "available_exams": "number",
+  "average_score": "number",
+  "completed_exams": "number",
+  "course_progress": [
+    {
+      "completed_assignments": "number",
+      "course_id": "string",
+      "course_name": "string",
+      "next_step": "null",
+      "progress_percentage": "number",
+      "teacher": {
+        "full_name": "string",
+        "id": "string"
+      },
+      "total_assignments": "number"
+    }
+  ],
+  "my_courses": "number",
+  "passed_exams": "number",
+  "recent_activity": [
+    {
+      "description": "string",
+      "occurred_at": "string",
+      "type": "string"
+    }
+  ],
+  "recent_results": [
+    {
+      "attempt_id": "string",
+      "course_id": "string",
+      "course_name": "string",
+      "exam_title": "string",
+      "percentage": "number",
+      "status": "string",
+      "submitted_at": "string"
+    }
+  ],
+  "study_groups": [],
+  "upcoming_exams": [
+    {
+      "assignment_id": "string",
+      "course_id": "string",
+      "course_name": "string",
+      "duration_minutes": "number",
+      "exam_title": "string",
+      "questions_count": "number",
+      "start_at": "string",
+      "status": "string"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "action": "string",
+  "event_id": "string",
+  "focus_violations": "number",
+  "status": "string",
+  "submission_reason": "null",
+  "threshold": "number"
+}

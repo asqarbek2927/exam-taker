@@ -1,0 +1,6 @@
+{
+  "archived_exams": "number",
+  "draft_exams": "number",
+  "ready_exams": "number",
+  "total_exams": "number"
+}

@@ -1,0 +1,75 @@
+{
+  "answers": [
+    {
+      "exam_question_id": "string",
+      "graded_at": "null|string",
+      "graded_by": "null|{\"email\": \"string\", \"full_name\": \"string\", \"id\": \"string\", \"role\": \"string\", \"username\": \"string\"}",
+      "id": "string",
+      "is_correct": "bool|null",
+      "max_points": "number",
+      "points_awarded": "number",
+      "position": "number",
+      "question": {
+        "default_points": "number",
+        "difficulty": "string",
+        "id": "string",
+        "module_id": "string",
+        "options": [
+          {
+            "id": "string",
+            "is_correct": "bool",
+            "position": "number",
+            "text": "string"
+          }
+        ],
+        "text": "string",
+        "type": "string"
+      },
+      "selected_option_ids": [
+        "string"
+      ],
+      "teacher_feedback": "string",
+      "text_answer": "string"
+    }
+  ],
+  "assignment_id": "string",
+  "attempt_number": "number",
+  "course": {
+    "id": "string",
+    "name": "string",
+    "status": "string"
+  },
+  "deadline_at": "string",
+  "events": [
+    {
+      "action": "string",
+      "client_at": "string",
+      "counts_violation": "bool",
+      "details": {
+        "visibility_state": "string"
+      },
+      "event_id": "string",
+      "focus_violations": "number",
+      "received_at": "string",
+      "type": "string"
+    }
+  ],
+  "exam_id": "string",
+  "exam_title": "string",
+  "finalization_reason": "string",
+  "focus_violations": "number",
+  "id": "string",
+  "passed": "bool",
+  "percentage": "number",
+  "score": "number",
+  "started_at": "string",
+  "status": "string",
+  "student": {
+    "email": "string",
+    "full_name": "string",
+    "id": "string",
+    "role": "string",
+    "username": "string"
+  },
+  "submitted_at": "string"
+}

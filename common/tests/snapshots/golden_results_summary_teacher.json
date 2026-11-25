@@ -1,0 +1,7 @@
+{
+  "average_score": "number",
+  "awaiting_review": "number",
+  "graded": "number",
+  "grading_progress_percentage": "number",
+  "submissions": "number"
+}

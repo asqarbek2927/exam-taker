@@ -1,0 +1,37 @@
+{
+  "answer": {
+    "exam_question_id": "string",
+    "graded_at": "string",
+    "graded_by": {
+      "email": "string",
+      "full_name": "string",
+      "id": "string",
+      "role": "string",
+      "username": "string"
+    },
+    "id": "string",
+    "is_correct": "null",
+    "max_points": "number",
+    "points_awarded": "number",
+    "position": "number",
+    "question": {
+      "default_points": "number",
+      "difficulty": "string",
+      "id": "string",
+      "module_id": "string",
+      "options": [],
+      "text": "string",
+      "type": "string"
+    },
+    "selected_option_ids": [],
+    "teacher_feedback": "string",
+    "text_answer": "string"
+  },
+  "attempt": {
+    "id": "string",
+    "passed": "bool",
+    "percentage": "number",
+    "score": "number",
+    "status": "string"
+  }
+}

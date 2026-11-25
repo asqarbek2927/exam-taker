@@ -1,0 +1,20 @@
+{
+  "avatar_url": "string",
+  "created_at": "string",
+  "email": "string",
+  "full_name": "string",
+  "id": "string",
+  "must_change_password": "bool",
+  "permissions": {
+    "can_assign_exam": "bool",
+    "can_create_exam": "bool",
+    "can_create_question": "bool",
+    "can_grade": "bool",
+    "is_support_teacher": "bool"
+  },
+  "phone_number": "string",
+  "role": "string",
+  "status": "string",
+  "updated_at": "string",
+  "username": "string"
+}

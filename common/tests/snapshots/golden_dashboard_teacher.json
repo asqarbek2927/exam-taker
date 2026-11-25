@@ -1,0 +1,64 @@
+{
+  "active_assignments": "number",
+  "average_student_score": "number",
+  "course_cards": [
+    {
+      "average_score": "number",
+      "course_id": "string",
+      "course_name": "string",
+      "exams_count": "number",
+      "groups_count": "number",
+      "students_count": "number"
+    }
+  ],
+  "grading_queue": [],
+  "my_courses": "number",
+  "my_exams": "number",
+  "my_groups": "number",
+  "my_questions": "number",
+  "my_students": "number",
+  "pending_grading": "number",
+  "recent_results": [
+    {
+      "attempt_id": "string",
+      "course_name": "string",
+      "exam_title": "string",
+      "percentage": "number",
+      "status": "string",
+      "student_id": "string",
+      "student_name": "string",
+      "submitted_at": "string"
+    }
+  ],
+  "result_activity": {
+    "items": [
+      {
+        "average_score": "null|number",
+        "date": "string",
+        "graded_attempts": "number"
+      }
+    ],
+    "period_days": "number",
+    "previous_items": [
+      {
+        "average_score": "null",
+        "date": "string",
+        "graded_attempts": "number"
+      }
+    ]
+  },
+  "upcoming_exams": [
+    {
+      "assignment_id": "string",
+      "course_id": "string",
+      "course_name": "string",
+      "duration_minutes": "number",
+      "exam_id": "string",
+      "exam_title": "string",
+      "groups": [],
+      "start_at": "string",
+      "status": "string",
+      "students_count": "number"
+    }
+  ]
+}
