@@ -12,7 +12,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 
 from apps.academics.models import Course, Module
 
-from .choices import QuestionType
+from .choices import MANUAL_GRADED_TYPES
 
 INFO_SHEET = "Ma'lumot"
 QUESTIONS_SHEET = "Savollar"
@@ -30,7 +30,11 @@ QUESTION_HEADERS = [
 
 
 class QuestionXLSXError(ValueError):
-    pass
+    """Import xatosi. `messages` — barcha xatolar (bir nechta qatorda xato bo‘lsa ham)."""
+
+    def __init__(self, message: str | list[str]):
+        self.messages = [message] if isinstance(message, str) else list(message)
+        super().__init__("; ".join(self.messages))
 
 
 @dataclass(frozen=True)
@@ -113,6 +117,19 @@ def _add_example_rows(sheet) -> None:
             None,
             5,
         ],
+        [
+            5,
+            "PYTHON_CODE",
+            "Ikki sonni qo'shib natijani chiqaradigan Python funksiyasini yozing.",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            5,
+        ],
     ]
     for row in rows:
         sheet.append(row)
@@ -128,6 +145,13 @@ def build_question_import_template(*, course: Course, module: Module) -> bytes:
     info.append(["Modul ID", str(module.id), "O'zgartirmang"])
     info.append(["Modul nomi", module.title, "Ma'lumot uchun"])
     info.append(["Qoida", "Faqat 'Savollar' varag'ini to'ldiring", "'Namuna' import qilinmaydi"])
+    info.append(
+        [
+            "Turlar",
+            "SINGLE_CHOICE, MULTIPLE_CHOICE, TRUE_FALSE, OPEN_ENDED, PYTHON_CODE",
+            "OPEN_ENDED va PYTHON_CODE: variant va javob harfi bo'sh",
+        ]
+    )
     info.column_dimensions["A"].width = 20
     info.column_dimensions["B"].width = 50
     info.column_dimensions["C"].width = 45
@@ -151,11 +175,36 @@ def _text(value) -> str:
     return "" if value is None else str(value).strip()
 
 
+# Rus klaviaturasida yozilgan, lotin harfiga aynan o‘xshash kirill harflari.
+_CYRILLIC_LOOKALIKES = str.maketrans({"А": "A", "В": "B", "С": "C", "Е": "E"})
+
+
 def _correct_letters(value) -> set[str]:
-    raw = _text(value).upper()
+    """`A`, `a, c`, `A;C`, `A C`, `AC`, kirillcha `А` — hammasi qabul qilinadi."""
+    raw = _text(value).upper().translate(_CYRILLIC_LOOKALIKES)
     if not raw:
         return set()
-    return {part for part in re.split(r"[,;\s]+", raw) if part}
+    letters: set[str] = set()
+    for part in re.split(r"[,;/\s]+", raw):
+        if not part:
+            continue
+        if len(part) > 1 and set(part) <= set(OPTION_LETTERS):
+            letters.update(part)  # "AC" -> A, C
+        else:
+            letters.add(part)
+    return letters
+
+
+def _question_type(value) -> str:
+    """`single choice`, `Single-Choice`, ` SINGLE_CHOICE ` -> `SINGLE_CHOICE`."""
+    return re.sub(r"[\s\-/]+", "_", _text(value).upper()).strip("_")
+
+
+def _points(value):
+    """Matn ko‘rinishidagi `2,5` (vergulli kasr) -> `2.5`. Raqamlar o‘zgarmaydi."""
+    if isinstance(value, str):
+        return value.strip().replace(",", ".")
+    return value
 
 
 def _parse_loaded_workbook(workbook) -> ParsedQuestionWorkbook:
@@ -171,24 +220,33 @@ def _parse_loaded_workbook(workbook) -> ParsedQuestionWorkbook:
         raise QuestionXLSXError("XLSX ichida Kurs ID va Modul ID bo'lishi shart.")
 
     sheet = workbook[QUESTIONS_SHEET]
-    if [_text(cell.value) for cell in sheet[1]][: len(QUESTION_HEADERS)] != QUESTION_HEADERS:
+    width = len(QUESTION_HEADERS)
+    header = next(sheet.iter_rows(min_row=1, max_row=1, max_col=width, values_only=True), ())
+    if [_text(value) for value in header] != QUESTION_HEADERS:
         raise QuestionXLSXError("`Savollar` varag'idagi ustun nomlari o'zgartirilgan.")
-    if sheet.max_row - 1 > MAX_IMPORT_ROWS:
-        raise QuestionXLSXError(
-            f"Bitta faylda ko'pi bilan {MAX_IMPORT_ROWS} ta savol bo'lishi mumkin."
-        )
 
+    # `sheet.max_row` ishlatilmaydi: Excel/Google Sheets formatlangan bo‘sh qatorlarni ham
+    # yozadi (max_row=1000), ba’zi dasturlar esa `<dimension>` ni umuman yozmaydi (None).
+    # Shuning uchun faqat to‘ldirilgan qatorlar sanaladi.
     questions: list[ParsedQuestionRow] = []
-    for row_number, values in enumerate(
-        sheet.iter_rows(min_row=2, max_col=len(QUESTION_HEADERS), values_only=True), start=2
+    row_errors: list[str] = []  # hamma qatordagi xatolar birdaniga qaytariladi
+    filled_rows = 0
+    for row_number, row in enumerate(
+        sheet.iter_rows(min_row=2, max_col=width, values_only=True), start=2
     ):
+        values = (tuple(row) + (None,) * width)[:width]
+        if not any(_text(value) for value in values):
+            continue
+        filled_rows += 1
+        if filled_rows > MAX_IMPORT_ROWS:
+            raise QuestionXLSXError(
+                f"Bitta faylda ko'pi bilan {MAX_IMPORT_ROWS} ta savol bo'lishi mumkin."
+            )
         _, question_type, question_text, *tail = values
         option_values = tail[: len(OPTION_LETTERS)]
         correct_value, points = tail[len(OPTION_LETTERS) :]
-        if not any(_text(value) for value in values):
-            continue
 
-        question_type = _text(question_type).upper()
+        question_type = _question_type(question_type)
         options_by_letter = {
             letter: _text(value)
             for letter, value in zip(OPTION_LETTERS, option_values, strict=True)
@@ -196,15 +254,18 @@ def _parse_loaded_workbook(workbook) -> ParsedQuestionWorkbook:
         }
         correct = _correct_letters(correct_value)
         unknown_answers = correct - options_by_letter.keys()
+        if question_type in MANUAL_GRADED_TYPES and correct:
+            row_errors.append(
+                f"{row_number}-qator: {question_type} savolda to'g'ri javob harfi "
+                "bo'lmasligi kerak."
+            )
+            continue
         if unknown_answers:
             bad = ", ".join(sorted(unknown_answers))
-            raise QuestionXLSXError(
+            row_errors.append(
                 f"{row_number}-qator: javob ({bad}) mavjud bo'lmagan variantni ko'rsatgan."
             )
-        if question_type == QuestionType.OPEN_ENDED and correct:
-            raise QuestionXLSXError(
-                f"{row_number}-qator: OPEN_ENDED savolda to'g'ri javob harfi bo'lmasligi kerak."
-            )
+            continue
 
         options = [
             {"text": text, "is_correct": letter in correct}
@@ -217,11 +278,13 @@ def _parse_loaded_workbook(workbook) -> ParsedQuestionWorkbook:
                     "type": question_type,
                     "text": _text(question_text),
                     "options": options,
-                    "default_points": points,
+                    "default_points": _points(points),
                 },
             )
         )
 
+    if row_errors:
+        raise QuestionXLSXError(row_errors)
     if not questions:
         raise QuestionXLSXError("`Savollar` varag'ida import qilinadigan savol topilmadi.")
     return ParsedQuestionWorkbook(

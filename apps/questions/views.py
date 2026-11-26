@@ -162,12 +162,21 @@ class QuestionViewSet(
         try:
             parsed = parse_question_import(upload.validated_data["file"])
         except QuestionXLSXError as exc:
-            raise serializers.ValidationError({"file": [str(exc)]}) from exc
+            raise serializers.ValidationError({"file": exc.messages}) from exc
 
         context = QuestionImportContextSerializer(
             data={"course_id": parsed.course_id, "module_id": parsed.module_id}
         )
-        context.is_valid(raise_exception=True)
+        if not context.is_valid():
+            # Kalitlar (`course_id` / `module_id`) o‘zgarmaydi — faqat tushunarli matn.
+            hint = "Shablonni `import-template` orqali shu kurs uchun qayta yuklab oling."
+            labels = {"course_id": "Kurs", "module_id": "Modul"}
+            raise serializers.ValidationError(
+                {
+                    key: [f"Fayldagi {labels.get(key, key)} ID topilmadi. {hint}"]
+                    for key in context.errors
+                }
+            )
         course = context.validated_data["course"]
         module = context.validated_data["module"]
         services.validate_question_context(user=request.user, course=course, module=module)

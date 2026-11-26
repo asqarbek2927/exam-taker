@@ -25,11 +25,11 @@ Fayldagi varaqlar:
 | Ustun | Qoida |
 |---|---|
 | `T/r` | Ixtiyoriy tartib raqami |
-| `Turi` | `SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `TRUE_FALSE` yoki `OPEN_ENDED` |
+| `Turi` | `SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `TRUE_FALSE`, `OPEN_ENDED` yoki `PYTHON_CODE` (katta-kichik harf, probel yoki `-` farqi yo'q: `single choice` ham bo'ladi) |
 | `Savol` | Savol matni |
-| `Variant A`–`Variant F` | Javob variantlari; `OPEN_ENDED` uchun bo'sh |
-| `To'g'ri javob` | `A`; bir nechta javob uchun `A,C`; `OPEN_ENDED` uchun bo'sh |
-| `Ball` | `1` dan `100` gacha, majburiy |
+| `Variant A`–`Variant F` | Javob variantlari; `OPEN_ENDED` va `PYTHON_CODE` uchun bo'sh |
+| `To'g'ri javob` | `A`; bir nechta javob uchun `A,C` (`a, c`, `A;C`, `AC` ham bo'ladi; kirillcha `А/В/С/Е` lotinchaga o'giriladi); `OPEN_ENDED` va `PYTHON_CODE` uchun bo'sh |
+| `Ball` | `1` dan `100` gacha, majburiy; kasr `2.5` yoki `2,5` |
 
 ## 3. Faylni import qilish
 
@@ -56,4 +56,12 @@ Avval barcha qatorlar tekshiriladi. Bitta qator xato bo'lsa ham hech qaysi savol
 yaratilmaydi va javobda xato qatorining Excel raqami ko'rsatiladi. Fayl hajmi
 5 MB va savollar soni 500 tadan oshmasligi kerak.
 
+`PYTHON_CODE` savollari qo'lda baholanadi: student kodi serverda ishga tushirilmaydi.
+
+Savollar soni faqat to'ldirilgan qatorlar bo'yicha hisoblanadi — formatlangan bo'sh
+qatorlar (masalan, Excel yoki Google Sheets'da pastgacha tortilgan formatlash) hisobga
+olinmaydi.
+
 Ulashish uchun tayyor misol: [question_import_namuna.xlsx](question_import_namuna.xlsx).
+Bu faqat **misol**: undagi Kurs ID va Modul ID soxta, uni to'g'ridan-to'g'ri import qilib
+bo'lmaydi. Har doim o'z kursingiz uchun shablonni `import-template` orqali yuklab oling.
