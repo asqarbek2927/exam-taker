@@ -74,6 +74,7 @@ class QuestionBankSummarySerializer(serializers.Serializer):
     active_questions = serializers.IntegerField()
     choice_questions = serializers.IntegerField()
     open_ended = serializers.IntegerField()
+    python_code = serializers.IntegerField()
     archived = serializers.IntegerField()
 
 

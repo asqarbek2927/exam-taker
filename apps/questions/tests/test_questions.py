@@ -416,6 +416,7 @@ def test_question_bank_summary_is_role_scoped(auth_client, admin, ctx):
         "active_questions": 4,
         "choice_questions": 2,
         "open_ended": 1,
+        "python_code": 0,
         "archived": 1,
     }
     assert auth_client(admin).get(f"{QUESTIONS}/summary").json()["active_questions"] == 5

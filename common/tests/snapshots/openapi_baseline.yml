@@ -564,9 +564,9 @@ paths:
   /api/v1/answers/{answer_id}/grade:
     patch:
       operationId: v1_answers_grade_partial_update
-      description: OPEN_ENDED javobni baholaydi. Hamma javob baholangach attempt `GRADED`
-        bo‘ladi va `score/percentage/passed` hisoblanadi. Baholangan javobni qayta
-        baholash mumkin.
+      description: OPEN_ENDED yoki PYTHON_CODE javobni qo‘lda baholaydi (`0..max_points`).
+        Hamma qo‘lda baholanadigan javob baholangach attempt `GRADED` bo‘ladi va `score/percentage/passed`
+        hisoblanadi. Baholangan javobni qayta baholash mumkin.
       parameters:
       - in: path
         name: answer_id
@@ -4554,6 +4554,7 @@ components:
           maxLength: 20000
         revision:
           type: integer
+          maximum: 2147483646
           minimum: 0
       required:
       - revision
@@ -7865,6 +7866,8 @@ components:
           type: integer
         open_ended:
           type: integer
+        python_code:
+          type: integer
         archived:
           type: integer
       required:
@@ -7872,6 +7875,7 @@ components:
       - archived
       - choice_questions
       - open_ended
+      - python_code
     QuestionCourseBrief:
       type: object
       properties:

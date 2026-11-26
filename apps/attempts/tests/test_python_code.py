@@ -151,3 +151,165 @@ def test_python_answer_accepts_up_to_20000_characters(auth_client, python_world)
         url, {"text_answer": "x" * 20001, "revision": ok.json()["revision"]}, format="json"
     )
     assert too_long.status_code == 422
+
+
+# --------------------------------------------------------------------------
+# Frontend handoff "Integration check" — faqat API orqali, factory'siz oqim.
+# --------------------------------------------------------------------------
+def _iso(delta):
+    from django.utils import timezone
+
+    return (timezone.now() + delta).isoformat()
+
+
+def _api_world(auth_client, *, review_mode):
+    from datetime import timedelta
+
+    course = CourseFactory()
+    teacher = TeacherFactory()
+    CourseTeacherFactory(course=course, teacher=teacher)
+    student = StudentFactory()
+    EnrollmentFactory(course=course, student=student)
+    module = ModuleFactory(course=course)
+    staff = auth_client(teacher)
+
+    created = staff.post(
+        "/api/v1/questions",
+        {
+            "course_id": str(course.id),
+            "module_id": str(module.id),
+            "type": "PYTHON_CODE",
+            "difficulty": "MEDIUM",
+            "text": "Write Python that prints 5",
+            "default_points": 5,
+            "options": [],
+        },
+        format="json",
+    )
+    assert created.status_code == 201, created.json()
+    assert created.json()["type"] == "PYTHON_CODE"
+    question_id = created.json()["id"]
+
+    exam = staff.post(
+        "/api/v1/exams",
+        {
+            "course_id": str(course.id),
+            "title": "Python exam",
+            "passing_score_percent": 50,
+            "status": "READY",
+            "module_ids": [str(module.id)],
+            "questions": [{"question_id": question_id}],
+        },
+        format="json",
+    )
+    assert exam.status_code == 201, exam.json()
+    (exam_question,) = exam.json()["questions"]
+    assert exam_question["question"]["type"] == "PYTHON_CODE"
+
+    assignment = staff.post(
+        "/api/v1/exam-assignments",
+        {
+            "exam_id": exam.json()["id"],
+            "audience_type": "ALL_COURSE_STUDENTS",
+            "start_at": _iso(timedelta(hours=-1)),
+            "end_at": _iso(timedelta(days=1)),
+            "duration_minutes": 30,
+            "max_attempts": 1,
+            "result_review_mode": review_mode,
+        },
+        format="json",
+    )
+    assert assignment.status_code == 201, assignment.json()
+    return {
+        "staff": staff,
+        "student": auth_client(student),
+        "question_id": question_id,
+        "exam_question_id": exam_question["id"],
+        "assignment_id": assignment.json()["id"],
+    }
+
+
+def _take_and_grade(world, code=CODE):
+    student = world["student"]
+    started = student.post(f"/api/v1/exam-assignments/{world['assignment_id']}/start")
+    assert started.status_code == 201, started.json()
+    attempt_id = started.json()["id"]
+
+    # Savol bankda keyin tahrirlansa ham faol attempt o‘zgarmaydi (snapshot).
+    world["staff"].patch(
+        f"/api/v1/questions/{world['question_id']}", {"text": "Edited"}, format="json"
+    )
+
+    url = f"/api/v1/attempts/{attempt_id}/answers/{world['exam_question_id']}"
+    saved = student.put(url, {"text_answer": code, "revision": 0}, format="json")
+    assert saved.status_code == 200, saved.json()
+    reloaded = _python_entry(student.get(f"/api/v1/attempts/{attempt_id}").json())
+    assert reloaded["text"] == "Write Python that prints 5"
+    assert reloaded["answer"] == {
+        "option_ids": [],
+        "text_answer": code,
+        "revision": saved.json()["revision"],
+    }
+
+    submitted = student.post(f"/api/v1/attempts/{attempt_id}/submit").json()
+    assert submitted["status"] == AttemptStatus.PENDING_GRADING
+    assert submitted["score"] is None and submitted["passed"] is None
+    # Natija baholanmaguncha studentning boshqa endpointlarida ham yashirin.
+    (listed,) = student.get("/api/v1/attempts").json()["data"]
+    assert listed["score"] is None and listed["percentage"] is None
+
+    answer = StudentAnswer.objects.get(attempt_id=attempt_id)
+    graded = world["staff"].patch(
+        f"/api/v1/answers/{answer.id}/grade",
+        {"points_awarded": 4, "teacher_feedback": "Correct"},
+        format="json",
+    )
+    assert graded.status_code == 200, graded.json()
+    return attempt_id, student.get(f"/api/v1/attempts/{attempt_id}").json()
+
+
+def test_handoff_integration_after_grading_shows_own_code_and_feedback(auth_client):
+    world = _api_world(auth_client, review_mode="AFTER_GRADING")
+    _, result = _take_and_grade(world)
+
+    assert result["status"] == AttemptStatus.GRADED
+    assert Decimal(str(result["score"])) == Decimal("4")
+    (answer,) = result["answers"]
+    assert answer["question"]["type"] == "PYTHON_CODE"
+    assert answer["text_answer"] == CODE
+    assert answer["teacher_feedback"] == "Correct"
+    assert "is_correct" not in answer
+    assert "graded_by" not in answer  # staff-only maydon
+
+
+def test_handoff_integration_score_only_hides_code_and_feedback(auth_client):
+    world = _api_world(auth_client, review_mode="SCORE_ONLY")
+    _, result = _take_and_grade(world)
+
+    assert result["status"] == AttemptStatus.GRADED
+    assert Decimal(str(result["score"])) == Decimal("4")
+    assert "answers" not in result
+
+
+def test_other_student_cannot_see_python_attempt(auth_client):
+    world = _api_world(auth_client, review_mode="AFTER_GRADING")
+    attempt_id, _ = _take_and_grade(world)
+    outsider = auth_client(StudentFactory())
+    assert outsider.get(f"/api/v1/attempts/{attempt_id}").status_code == 404
+
+
+def test_python_question_rejects_choice_options_on_update(auth_client):
+    world = _api_world(auth_client, review_mode="AFTER_GRADING")
+    response = world["staff"].patch(
+        f"/api/v1/questions/{world['question_id']}",
+        {"options": [{"text": "a", "is_correct": True}, {"text": "b", "is_correct": False}]},
+        format="json",
+    )
+    assert response.status_code >= 400
+
+
+def test_crlf_and_unicode_code_is_stored_exactly(auth_client):
+    code = "s = 'Salom, dunyo — ✓'\r\nif s:\r\n\tprint(s)   \r\n"
+    world = _api_world(auth_client, review_mode="AFTER_GRADING")
+    _, result = _take_and_grade(world, code=code)
+    assert result["answers"][0]["text_answer"] == code

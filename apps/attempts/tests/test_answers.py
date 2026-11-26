@@ -210,3 +210,11 @@ def test_answer_within_grace_period_is_accepted(started, world):
     response = client.answer(attempt_id, world.eq["open"], text_answer="just in time")
     assert response.status_code == 200
     assert ExamAttempt.objects.get(pk=attempt_id).status == AttemptStatus.IN_PROGRESS
+
+
+def test_huge_revision_is_rejected_with_validation_error_not_500(started, world):
+    """Postgres integer chegarasidan katta revision — 422, server xatosi emas."""
+    client, attempt_id = started
+    response = client.answer(attempt_id, world.eq["open"], text_answer="x", revision=2**31)
+    assert response.status_code == 422
+    assert "revision" in response.json()["errors"]

@@ -2,5 +2,6 @@
   "active_questions": "number",
   "archived": "number",
   "choice_questions": "number",
-  "open_ended": "number"
+  "open_ended": "number",
+  "python_code": "number"
 }

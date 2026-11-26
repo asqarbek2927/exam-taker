@@ -7863,6 +7863,8 @@ components:
           type: integer
         open_ended:
           type: integer
+        python_code:
+          type: integer
         archived:
           type: integer
       required:
@@ -7870,6 +7872,7 @@ components:
       - archived
       - choice_questions
       - open_ended
+      - python_code
     QuestionCourseBrief:
       type: object
       properties:

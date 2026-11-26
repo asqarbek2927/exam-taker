@@ -48,12 +48,20 @@ NOT_STARTABLE_MESSAGES = {
 }
 
 _random = SystemRandom()
-FOCUS_VIOLATION_THRESHOLD = 3
-MIN_HIDDEN_SECONDS = 2.5
 
 
 def grace() -> timedelta:
     return timedelta(seconds=getattr(settings, "ATTEMPT_GRACE_SECONDS", 10))
+
+
+def focus_violation_threshold() -> int:
+    """Nechta fokus buzilishidan keyin attempt avtomatik yakunlanadi (sukut: 3)."""
+    return int(getattr(settings, "ATTEMPT_FOCUS_VIOLATION_THRESHOLD", 3))
+
+
+def min_hidden_seconds() -> float:
+    """Tab shuncha soniyadan uzoq yashirin bo‘lsa — buzilish hisoblanadi (sukut: 2.5)."""
+    return float(getattr(settings, "ATTEMPT_MIN_HIDDEN_SECONDS", 2.5))
 
 
 def is_expired(attempt: ExamAttempt, now: datetime) -> bool:
@@ -402,17 +410,18 @@ def record_attempt_event(
                     previous_focus_event
                     and previous_focus_event.type == AttemptEventType.TAB_HIDDEN
                     and (now - previous_focus_event.received_at).total_seconds()
-                    >= MIN_HIDDEN_SECONDS
+                    >= min_hidden_seconds()
                 )
 
             if counts_violation:
                 attempt.focus_violations += 1
                 attempt.save(update_fields=["focus_violations", "updated_at"])
 
+            threshold = focus_violation_threshold()
             event_action = (
                 AttemptEventAction.SUBMIT
                 if event_type == AttemptEventType.FULLSCREEN_DECLINED
-                or attempt.focus_violations >= FOCUS_VIOLATION_THRESHOLD
+                or attempt.focus_violations >= threshold
                 else AttemptEventAction.WARN
             )
 
@@ -433,7 +442,7 @@ def record_attempt_event(
                     submitted_at=now,
                     reason=FinalizationReason.FULLSCREEN_DECLINED,
                 )
-            elif attempt.focus_violations >= FOCUS_VIOLATION_THRESHOLD:
+            elif attempt.focus_violations >= threshold:
                 _finalize(
                     attempt,
                     submitted_at=now,

@@ -17,6 +17,9 @@ from .models import (
     StudentAnswer,
 )
 
+# Postgres integer max (2_147_483_647) dan bitta kam: server o‘zi +1 qila oladi.
+MAX_ANSWER_REVISION = 2_147_483_646
+
 
 class StudentSavedAnswerSerializer(serializers.Serializer):
     option_ids = serializers.ListField(child=serializers.UUIDField())
@@ -132,7 +135,41 @@ class StudentAttemptSerializer(_AttemptBaseSerializer):
         ).data
 
 
-class StudentResultAnswerSerializer(serializers.ModelSerializer):
+# `StudentAnswer` uchun umumiy maydonlar: snapshot (yangi) yoki legacy `exam_question`.
+# Yangi attemptlarda javob `attempt_question` (muzlatilgan snapshot) ga, snapshotdan oldingi
+# legacy attemptlarda esa to‘g‘ridan-to‘g‘ri `exam_question` ga bog‘langan.
+# Docstring ataylab yo‘q: drf-spectacular uni public API hujjatiga qo‘shib yuboradi.
+class _AnswerQuestionFieldsMixin:
+    @extend_schema_field(OpenApiTypes.UUID)
+    def get_exam_question_id(self, obj: StudentAnswer):
+        if obj.attempt_question_id is not None:
+            return obj.attempt_question.snapshot_question.source_exam_question_id
+        return obj.exam_question_id
+
+    def get_position(self, obj: StudentAnswer) -> int:
+        if obj.attempt_question_id is not None:
+            return obj.attempt_question.position
+        return obj.exam_question.position
+
+    @extend_schema_field(serializers.DecimalField(max_digits=6, decimal_places=2))
+    def get_max_points(self, obj: StudentAnswer):
+        if obj.attempt_question_id is not None:
+            return obj.attempt_question.snapshot_question.points
+        return obj.exam_question.points
+
+    def get_selected_option_ids(self, obj: StudentAnswer) -> list:
+        return [
+            link.attempt_option.snapshot_option.source_option_id
+            if link.attempt_option_id is not None
+            else link.option_id
+            for link in obj.selected_options.all()
+        ]
+
+    def get_option_ids(self, obj: StudentAnswer) -> list:
+        return self.get_selected_option_ids(obj)
+
+
+class StudentResultAnswerSerializer(_AnswerQuestionFieldsMixin, serializers.ModelSerializer):
     exam_question_id = serializers.SerializerMethodField()
     position = serializers.SerializerMethodField()
     max_points = serializers.SerializerMethodField()
@@ -153,23 +190,6 @@ class StudentResultAnswerSerializer(serializers.ModelSerializer):
             "teacher_feedback",
         ]
         read_only_fields = fields
-
-    @extend_schema_field(OpenApiTypes.UUID)
-    def get_exam_question_id(self, obj: StudentAnswer):
-        if obj.attempt_question_id is not None:
-            return obj.attempt_question.snapshot_question.source_exam_question_id
-        return obj.exam_question_id
-
-    def get_position(self, obj: StudentAnswer) -> int:
-        if obj.attempt_question_id is not None:
-            return obj.attempt_question.position
-        return obj.exam_question.position
-
-    @extend_schema_field(serializers.DecimalField(max_digits=6, decimal_places=2))
-    def get_max_points(self, obj: StudentAnswer):
-        if obj.attempt_question_id is not None:
-            return obj.attempt_question.snapshot_question.points
-        return obj.exam_question.points
 
     def get_question(self, obj: StudentAnswer) -> dict:
         include_correct = self.context.get("include_correct", False)
@@ -205,14 +225,6 @@ class StudentResultAnswerSerializer(serializers.ModelSerializer):
             "text": question.text,
             "options": options,
         }
-
-    def get_selected_option_ids(self, obj: StudentAnswer) -> list:
-        return [
-            link.attempt_option.snapshot_option.source_option_id
-            if link.attempt_option_id is not None
-            else link.option_id
-            for link in obj.selected_options.all()
-        ]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -320,7 +332,7 @@ class AttemptListSerializer(_AttemptBaseSerializer):
         read_only_fields = fields
 
 
-class StaffAnswerSerializer(serializers.ModelSerializer):
+class StaffAnswerSerializer(_AnswerQuestionFieldsMixin, serializers.ModelSerializer):
     exam_question_id = serializers.SerializerMethodField()
     position = serializers.SerializerMethodField()
     max_points = serializers.SerializerMethodField()
@@ -346,23 +358,6 @@ class StaffAnswerSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    @extend_schema_field(OpenApiTypes.UUID)
-    def get_exam_question_id(self, obj: StudentAnswer):
-        if obj.attempt_question_id is not None:
-            return obj.attempt_question.snapshot_question.source_exam_question_id
-        return obj.exam_question_id
-
-    def get_position(self, obj: StudentAnswer) -> int:
-        if obj.attempt_question_id is not None:
-            return obj.attempt_question.position
-        return obj.exam_question.position
-
-    @extend_schema_field(serializers.DecimalField(max_digits=6, decimal_places=2))
-    def get_max_points(self, obj: StudentAnswer):
-        if obj.attempt_question_id is not None:
-            return obj.attempt_question.snapshot_question.points
-        return obj.exam_question.points
-
     def get_question(self, obj: StudentAnswer) -> dict:
         if obj.attempt_question_id is None:
             return QuestionDetailSerializer(obj.exam_question.question).data
@@ -384,14 +379,6 @@ class StaffAnswerSerializer(serializers.ModelSerializer):
                 for option in question.options.all()
             ],
         }
-
-    def get_selected_option_ids(self, obj: StudentAnswer) -> list:
-        return [
-            link.attempt_option.snapshot_option.source_option_id
-            if link.attempt_option_id is not None
-            else link.option_id
-            for link in obj.selected_options.all()
-        ]
 
 
 class AttemptEventSerializer(serializers.ModelSerializer):
@@ -426,7 +413,8 @@ class AnswerInputSerializer(serializers.Serializer):
     text_answer = serializers.CharField(
         required=False, allow_blank=True, trim_whitespace=False, max_length=20000
     )
-    revision = serializers.IntegerField(min_value=0)
+    # PositiveIntegerField (Postgres integer) chegarasi; server revisionni +1 qilishi mumkin.
+    revision = serializers.IntegerField(min_value=0, max_value=MAX_ANSWER_REVISION)
 
 
 class AttemptEventInputSerializer(serializers.Serializer):
@@ -445,7 +433,7 @@ class AttemptEventResponseSerializer(serializers.Serializer):
     submission_reason = serializers.CharField(allow_null=True)
 
 
-class AnswerSerializer(serializers.ModelSerializer):
+class AnswerSerializer(_AnswerQuestionFieldsMixin, serializers.ModelSerializer):
     exam_question_id = serializers.SerializerMethodField()
     option_ids = serializers.SerializerMethodField()
 
@@ -453,20 +441,6 @@ class AnswerSerializer(serializers.ModelSerializer):
         model = StudentAnswer
         fields = ["exam_question_id", "option_ids", "text_answer", "revision", "updated_at"]
         read_only_fields = fields
-
-    @extend_schema_field(OpenApiTypes.UUID)
-    def get_exam_question_id(self, obj: StudentAnswer):
-        if obj.attempt_question_id is not None:
-            return obj.attempt_question.snapshot_question.source_exam_question_id
-        return obj.exam_question_id
-
-    def get_option_ids(self, obj: StudentAnswer) -> list:
-        return [
-            link.attempt_option.snapshot_option.source_option_id
-            if link.attempt_option_id is not None
-            else link.option_id
-            for link in obj.selected_options.all()
-        ]
 
 
 class PendingAttemptSerializer(AttemptListSerializer):

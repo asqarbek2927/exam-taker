@@ -329,3 +329,16 @@ def test_staff_detail_shows_grader_after_grading(auth_client, world, submitted):
     assert event.entity_id == open_answer(submitted, world).id
     assert event.metadata["attempt_id"] == str(submitted.id)
     assert "teacher_feedback" not in event.metadata
+
+
+def test_grade_response_query_count_does_not_regress(auth_client, world, submitted):
+    """Response uchun snapshot savol/optionlar oldindan yuklanadi (N+1 yo‘q)."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    answer = open_answer(submitted, world)
+    client = auth_client(world.teacher)
+    with CaptureQueriesContext(connection) as queries:
+        response = client.patch(grade_url(answer), {"points_awarded": 2}, format="json")
+    assert response.status_code == 200
+    assert len(queries.captured_queries) <= 16

@@ -40,6 +40,11 @@ def question_bank_summary(user) -> dict[str, int]:
             "pk",
             filter=Q(status=QuestionStatus.ACTIVE, type=QuestionType.OPEN_ENDED),
         ),
+        # Qo‘shimcha maydon: `open_ended` ma’nosi (faqat OPEN_ENDED) front uchun o‘zgarmaydi.
+        python_code=Count(
+            "pk",
+            filter=Q(status=QuestionStatus.ACTIVE, type=QuestionType.PYTHON_CODE),
+        ),
         archived=Count("pk", filter=Q(status=QuestionStatus.ARCHIVED)),
     )
 

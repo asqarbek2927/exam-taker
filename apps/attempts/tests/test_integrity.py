@@ -126,3 +126,28 @@ def test_event_scope_and_validation(auth_client, api, make_world):
     assert post_event(auth_client(world.teacher), attempt_id, "COPY").status_code == 403
     invalid = post_event(auth_client(world.student), attempt_id, "UNKNOWN")
     assert invalid.status_code == 422
+
+
+def test_focus_threshold_is_configurable(auth_client, api, make_world, settings):
+    """Sozlama orqali chegara o‘zgaradi; sukut (3) prod xatti-harakati o‘zgarmaydi."""
+    settings.ATTEMPT_FOCUS_VIOLATION_THRESHOLD = 1
+    world = make_world(open_ended=False)
+    attempt_id = api(world.student).start(world.assignment).json()["id"]
+    client = auth_client(world.student)
+
+    hidden_id = uuid.uuid4()
+    assert post_event(client, attempt_id, "TAB_HIDDEN", event_id=hidden_id).status_code == 200
+    AttemptEvent.objects.filter(event_id=hidden_id).update(
+        received_at=timezone.now() - timedelta(seconds=3)
+    )
+    visible = post_event(client, attempt_id, "TAB_VISIBLE").json()
+    assert visible["threshold"] == 1
+    assert visible["action"] == "SUBMIT"
+    assert visible["submission_reason"] == "FOCUS_LIMIT"
+
+
+def test_default_focus_settings_match_previous_constants():
+    from apps.attempts import services
+
+    assert services.focus_violation_threshold() == 3
+    assert services.min_hidden_seconds() == 2.5

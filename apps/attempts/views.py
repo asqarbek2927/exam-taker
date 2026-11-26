@@ -157,7 +157,7 @@ class AttemptViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
         payload = {
             "event_id": event.event_id,
             "focus_violations": attempt.focus_violations,
-            "threshold": services.FOCUS_VIOLATION_THRESHOLD,
+            "threshold": services.focus_violation_threshold(),
             "action": event_action,
             "status": attempt.status,
             "submission_reason": attempt.finalization_reason,
@@ -212,7 +212,8 @@ class PendingGradingView(generics.ListAPIView):
     request=GradeInputSerializer,
     responses={200: GradeResponseSerializer},
     description=(
-        "OPEN_ENDED javobni baholaydi. Hamma javob baholangach attempt `GRADED` bo‘ladi va "
+        "OPEN_ENDED yoki PYTHON_CODE javobni qo‘lda baholaydi (`0..max_points`). "
+        "Hamma qo‘lda baholanadigan javob baholangach attempt `GRADED` bo‘ladi va "
         "`score/percentage/passed` hisoblanadi. Baholangan javobni qayta baholash mumkin."
     ),
 )
@@ -229,9 +230,19 @@ class AnswerGradeView(APIView):
         answer, attempt = services.grade_answer(
             grader=request.user, answer=answer, **serializer.validated_data
         )
+        # Javob snapshot savolga bog‘langan (yangi attemptlar) yoki legacy `exam_question` ga —
+        # serializer ikkalasini ham o‘qiydi, shuning uchun ikkalasi ham oldindan yuklanadi.
         answer = (
-            StudentAnswer.objects.select_related("exam_question__question", "graded_by")
-            .prefetch_related("selected_options", "exam_question__question__options")
+            StudentAnswer.objects.select_related(
+                "graded_by",
+                "exam_question__question",
+                "attempt_question__snapshot_question",
+            )
+            .prefetch_related(
+                "selected_options__attempt_option__snapshot_option",
+                "exam_question__question__options",
+                "attempt_question__snapshot_question__options",
+            )
             .get(pk=answer.pk)
         )
         return Response(

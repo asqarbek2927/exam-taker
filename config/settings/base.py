@@ -213,6 +213,11 @@ SPECTACULAR_SETTINGS = {
 # Attempt `deadline_at` dan keyin ham shuncha soniya kechikkan so‘rov (tarmoq) qabul qilinadi.
 ATTEMPT_GRACE_SECONDS = env.int("ATTEMPT_GRACE_SECONDS", default=10)
 
+# Browser integrity: nechta fokus buzilishidan keyin attempt avtomatik yakunlanadi va
+# tab necha soniyadan uzoq yashirin tursa buzilish hisoblanadi.
+ATTEMPT_FOCUS_VIOLATION_THRESHOLD = env.int("ATTEMPT_FOCUS_VIOLATION_THRESHOLD", default=3)
+ATTEMPT_MIN_HIDDEN_SECONDS = env.float("ATTEMPT_MIN_HIDDEN_SECONDS", default=2.5)
+
 # API hujjatlari (/api/schema, /api/docs). Prod da sukut bo‘yicha o‘chiq.
 ENABLE_API_DOCS = env.bool("ENABLE_API_DOCS", default=DEBUG)
 
