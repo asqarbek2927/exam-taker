@@ -57,7 +57,11 @@ def test_template_has_ai_guide_with_prompts_and_rules(auth_client, import_ctx): 
         for cell in row
         if cell.value
     )
-    assert "[MAVZU]" in text and "[ТЕМА]" in text  # o‘zbekcha va ruscha prompt
+    # AI o‘zi savol yaratmaydi — ustozning tayyor savollarini ko‘chiradi (o‘zbekcha va ruscha).
+    assert "mening tayyor savollarim" in text and "мои готовые вопросы" in text
+    assert "Yangi savol qo'shma" in text
+    assert "[MAVZU]" not in text and "[ТЕМА]" not in text
+    assert "TAXMIN QILMA" in text  # javob ko‘rsatilmagan bo‘lsa `?`
     for rule in AI_RULES:
         assert rule in text
 
@@ -163,3 +167,30 @@ def test_file_without_info_sheet_gives_clear_message(auth_client, import_ctx):  
     response = _post(auth_client, import_ctx, workbook)
     assert response.status_code == 422
     assert "Ma'lumot" in response.json()["errors"]["file"][0]
+
+
+# ------------------------- `?` — manbada javob yo‘q ----------------------------
+def test_question_mark_answer_is_reported_not_guessed(auth_client, import_ctx):  # noqa: F811
+    """AI javobni taxmin qilmay `?` yozgan qatorlar aniq xato bilan qaytadi."""
+    workbook = _template(import_ctx)
+    sheet = workbook["Savollar"]
+    sheet.append([1, "SINGLE_CHOICE", "Javobi bor", "a", "b", N, N, N, N, "A", 2])
+    sheet.append([2, "SINGLE_CHOICE", "Javobi yo'q", "a", "b", N, N, N, N, "?", 2])
+    sheet.append([3, "MULTIPLE_CHOICE", "Qisman", "a", "b", "c", N, N, N, "A,?", 3])
+    response = _post(auth_client, import_ctx, workbook)
+    assert response.status_code == 422
+    errors = response.json()["errors"]["file"]
+    assert [error.split("-qator")[0] for error in errors] == ["3", "4"]
+    assert all("to'g'ri javob ko'rsatilmagan" in error for error in errors)
+    assert Question.objects.count() == 0
+
+
+def test_question_mark_on_open_and_code_questions_is_ignored(auth_client, import_ctx):  # noqa: F811
+    """OPEN_ENDED / PYTHON_CODE da javob ustuni baribir bo‘sh — `?` xalaqit bermaydi."""
+    workbook = _template(import_ctx)
+    sheet = workbook["Savollar"]
+    sheet.append([1, "OPEN_ENDED", "Tushuntiring", N, N, N, N, N, N, "?", 5])
+    sheet.append([2, "PYTHON_CODE", "Kod yozing", N, N, N, N, N, N, "?", 5])
+    response = _post(auth_client, import_ctx, workbook)
+    assert response.status_code == 201, response.json()
+    assert response.json()["created_count"] == 2

@@ -137,42 +137,53 @@ def _add_example_rows(sheet) -> None:
 
 
 AI_PROMPT_UZ = (
-    "Ilova qilingan Excel fayldagi \"AI uchun yo'riqnoma\" varag'idagi qoidalarga qat'iy amal "
-    "qilib, \"Savollar\" varag'iga [MAVZU] bo'yicha [SON] ta savol qo'sh "
-    "(masalan: 4 ta SINGLE_CHOICE, 2 ta MULTIPLE_CHOICE, 2 ta TRUE_FALSE, 1 ta OPEN_ENDED, "
-    "1 ta PYTHON_CODE). Faylning qolgan qismini o'zgartirma va natijani aynan shu .xlsx fayl "
-    "ko'rinishida qaytar."
+    "Senga ikkita fayl beryapman: 1) ExamTaker shabloni (.xlsx), 2) mening tayyor savollarim. "
+    "Mening savollarimni shablondagi \"AI uchun yo'riqnoma\" varag'idagi qoidalarga qat'iy "
+    "amal qilib \"Savollar\" varag'iga ko'chir. Yangi savol qo'shma, savol va variant "
+    "matnlarini o'zgartirma va tarjima qilma. To'g'ri javoblar mening faylimda "
+    "[QANDAY BELGILANGAN: masalan, * belgisi / qalin shrift / alohida javoblar ro'yxati] bilan "
+    "ko'rsatilgan. Natijani aynan shu .xlsx fayl ko'rinishida qaytar."
 )
 AI_PROMPT_RU = (
-    'Строго следуя правилам на листе "AI uchun yo\'riqnoma" в приложенном Excel-файле, добавь '
-    'на лист "Savollar" [КОЛИЧЕСТВО] вопросов по теме [ТЕМА] (например: 4 SINGLE_CHOICE, '
-    "2 MULTIPLE_CHOICE, 2 TRUE_FALSE, 1 OPEN_ENDED, 1 PYTHON_CODE). Остальную часть файла не "
-    "меняй и верни результат именно в виде этого .xlsx файла."
+    "Я прикладываю два файла: 1) шаблон ExamTaker (.xlsx), 2) мои готовые вопросы. Перенеси мои "
+    'вопросы на лист "Savollar" шаблона, строго следуя правилам на листе "AI uchun '
+    "yo'riqnoma\". Не добавляй новых вопросов, не меняй и не переводи текст вопросов и "
+    "вариантов. Правильные ответы в моём файле отмечены [КАК ОТМЕЧЕНЫ: например, знаком *, "
+    "жирным шрифтом, отдельным списком ответов]. Верни результат именно в виде этого .xlsx файла."
 )
 AI_RULES = [
+    "Faqat ustoz bergan savollarni ko'chir. O'zingdan yangi savol, variant yoki javob qo'shma; "
+    "savol va variant matnini o'zgartirma, qisqartirma va tarjima qilma.",
+    "Manbadagi BARCHA savollarni ko'chir, birortasini ham tashlab ketma.",
+    "Manbada savolning to'g'ri javobi ko'rsatilmagan bo'lsa, TAXMIN QILMA — javob ustuniga (J) "
+    "faqat ? belgisini yoz.",
     "Faqat \"Savollar\" varag'iga, 2-qatordan boshlab yoz. 1-qatordagi sarlavhalarni o'zgartirma.",
-    "\"Ma'lumot\", \"Namuna\" va shu varaqni o'zgartirma, o'chirma; varaq nomlarini o'zgartirma, "
-    "yangi varaq qo'shma.",
+    '"Ma\'lumot", "Namuna" va shu varaqni o\'zgartirma, o\'chirma; varaq nomlarini '
+    "o'zgartirma, yangi varaq qo'shma.",
     "Har bir qator = 1 ta savol. Ustunlar: A = T/r (1, 2, 3...), B = Turi, C = Savol matni, "
     "D–I = Variant A–F, J = To'g'ri javob, K = Ball.",
-    "Turi faqat quyidagilardan biri: SINGLE_CHOICE, MULTIPLE_CHOICE, TRUE_FALSE, OPEN_ENDED, "
-    "PYTHON_CODE.",
+    "Turini manbadagi savolga qarab tanla: variantli va 1 ta javob — SINGLE_CHOICE; variantli va "
+    "bir nechta javob — MULTIPLE_CHOICE; to'g'ri/noto'g'ri — TRUE_FALSE; javobni student o'zi "
+    "yozadi — OPEN_ENDED; kod yozish topshirig'i — PYTHON_CODE.",
     "SINGLE_CHOICE: 2–6 ta variant, aynan 1 ta to'g'ri javob harfi (masalan: B).",
     "MULTIPLE_CHOICE: 2–6 ta variant, 1 yoki bir nechta to'g'ri javob, vergul bilan "
     "(masalan: A,C).",
-    "TRUE_FALSE: aynan 2 ta variant (A = To'g'ri, B = Noto'g'ri) va 1 ta javob harfi.",
+    "TRUE_FALSE: aynan 2 ta variant (manbadagidek, masalan: To'g'ri / Noto'g'ri) va 1 ta javob "
+    "harfi.",
     "OPEN_ENDED va PYTHON_CODE: variant ustunlari (D–I) va javob ustuni (J) BO'SH qoladi; "
     "faqat savol matni va ball yoziladi.",
     "Javob ustuniga faqat harf yoz (A–F), variant matnini emas.",
     'Variant matni boshiga "A)" kabi harf yozma; bitta savol ichida variantlar takrorlanmasin.',
-    "Ball: 1 dan 100 gacha son (masalan: 2 yoki 2.5).",
+    "Ball: manbada ko'rsatilgan bo'lsa — o'sha (1 dan 100 gacha); ko'rsatilmagan bo'lsa: "
+    "SINGLE_CHOICE 2, MULTIPLE_CHOICE 3, TRUE_FALSE 1, OPEN_ENDED 5, PYTHON_CODE 5.",
     "Bitta faylda 500 tadan ko'p savol bo'lmasin.",
     "Natijani shu .xlsx fayl ko'rinishida qaytar (CSV yoki matnli jadval emas).",
 ]
 
 
 def _add_ai_guide_sheet(workbook) -> None:
-    """Ustoz shablonni AI'ga berib to‘ldirtirishi uchun: tayyor prompt va aniq qoidalar.
+    """Ustoz o‘zining tayyor savollarini AI yordamida shablonga ko‘chirishi uchun:
+    tayyor prompt va aniq qoidalar. AI o‘zi savol yaratmaydi.
 
     Bu varaq import qilinmaydi.
     """
@@ -188,12 +199,16 @@ def _add_ai_guide_sheet(workbook) -> None:
         cell.font = Font(bold=True)
         cell.fill = section_fill
 
-    sheet.append(["AI (ChatGPT, Gemini, Claude va h.k.) bilan savollar tayyorlash"])
+    sheet.append(
+        ["Tayyor savollaringizni AI (ChatGPT, Gemini, Claude) yordamida shablonga ko'chirish"]
+    )
     sheet.cell(row=1, column=1).font = title_font
     sheet.append(
         [
-            "1) Shu faylni AI'ga yuklang. 2) Pastdagi promptni nusxalab, [MAVZU] va [SON] ni "
-            "almashtiring. 3) AI qaytargan .xlsx faylni platformaga yuklang."
+            "1) AI'ga shu shablonni va o'zingizning savollar faylingizni (Word, PDF, Excel yoki "
+            "matn) yuklang. 2) Pastdagi promptni nusxalab, to'g'ri javoblar qanday belgilanganini "
+            "yozing. 3) AI qaytargan faylni tekshiring (ayniqsa to'g'ri javoblarni) va "
+            "platformaga yuklang. Xato chiqsa — xato matnini AI'ga berib tuzattiring."
         ]
     )
     sheet.append([])
@@ -430,6 +445,16 @@ def _parse_loaded_workbook(workbook) -> ParsedQuestionWorkbook:
                 if _text(value)
             }
         )
+        if "?" in _text(correct_value):
+            # Yo‘riqnoma: manbada javob ko‘rsatilmagan bo‘lsa, AI taxmin qilmay `?` yozadi.
+            if question_type in MANUAL_GRADED_TYPES:
+                correct_value = None  # bu turlarda javob ustuni baribir bo‘sh bo‘lishi kerak
+            else:
+                row_errors.append(
+                    f"{row_number}-qator: to'g'ri javob ko'rsatilmagan (?). Manbadan tekshirib, "
+                    "javob harfini yozing."
+                )
+                continue
         correct = _correct_letters(correct_value)
         unknown_answers = correct - options_by_letter.keys()
         if unknown_answers and question_type not in MANUAL_GRADED_TYPES:

@@ -31,15 +31,25 @@ Fayldagi varaqlar:
 | `To'g'ri javob` | `A`; bir nechta javob uchun `A,C` (`a, c`, `A;C`, `AC` ham bo'ladi; kirillcha `А/В/С/Е` lotinchaga o'giriladi); `OPEN_ENDED` va `PYTHON_CODE` uchun bo'sh |
 | `Ball` | `1` dan `100` gacha, majburiy; kasr `2.5` yoki `2,5` |
 
-## AI (ChatGPT, Gemini, Claude) bilan to'ldirish
+## Tayyor savollarni AI (ChatGPT, Gemini, Claude) bilan ko'chirish
 
-Shablonda **`AI uchun yo'riqnoma`** varag'i bor: unda o'zbekcha va ruscha tayyor prompt hamda
-AI uchun aniq qoidalar yozilgan.
+Ustozda savollar allaqachon tayyor bo'ladi (Word, PDF, boshqa Excel yoki matn). AI **o'zi savol
+yaratmaydi** — faqat ustozning savollarini shablon formatiga ko'chiradi. Shablondagi
+**`AI uchun yo'riqnoma`** varag'ida o'zbekcha va ruscha tayyor prompt hamda AI uchun aniq
+qoidalar yozilgan.
 
-1. Shablonni yuklab oling va AI'ga yuklang.
-2. Yo'riqnomadagi promptni nusxalab, `[MAVZU]` va `[SON]` ni almashtirib yuboring.
-3. AI qaytargan `.xlsx` faylni platformaga yuklang. Xato chiqsa — xato matnini AI'ga berib,
-   tuzattiring va qayta yuklang.
+1. AI'ga ikkita fayl yuklang: yuklab olingan shablon va o'zingizning savollar faylingiz.
+2. Yo'riqnomadagi promptni nusxalang va unda to'g'ri javoblar qanday belgilanganini yozing
+   (masalan: `*` belgisi, qalin shrift yoki alohida javoblar ro'yxati).
+3. AI qaytargan faylni **tekshiring** — ayniqsa to'g'ri javoblarni — va platformaga yuklang.
+   Xato chiqsa, xato matnini AI'ga berib tuzattiring va qayta yuklang.
+
+Manbada biror savolning to'g'ri javobi ko'rsatilmagan bo'lsa, AI uni taxmin qilmaydi va javob
+ustuniga `?` yozadi. Import bunday qatorlarni qabul qilmaydi va aniq ko'rsatadi:
+`5-qator: to'g'ri javob ko'rsatilmagan (?). Manbadan tekshirib, javob harfini yozing.`
+
+Savollar juda ko'p bo'lsa (100+), AI'ga 30–50 tadan bo'lib bering — AI uzun javobni yarmida
+to'xtatib qo'yishi mumkin.
 
 Import AI'ning odatiy "xatolari"ni o'zi to'g'rilaydi:
 

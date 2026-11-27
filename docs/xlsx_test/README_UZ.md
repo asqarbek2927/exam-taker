@@ -136,7 +136,7 @@ Fayl 3 ta varaqdan iborat:
 | pastgacha tortilgan formatlash (bo'sh qatorlar) | hisobga olinmaydi |
 
 AI (ChatGPT va h.k.) to'ldirgan fayllar uchun qo'shimcha qulayliklar va tayyor prompt —
-`docs/QUESTION_IMPORT_UZ.md` dagi "AI bilan to'ldirish" bo'limida va shablondagi
+`docs/QUESTION_IMPORT_UZ.md` dagi "Tayyor savollarni AI bilan ko'chirish" bo'limida va shablondagi
 `AI uchun yo'riqnoma` varag'ida.
 
 ## 4. Kutilgan javoblar
