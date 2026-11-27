@@ -1,5 +1,8 @@
 # ExamTaker production deploy (PostgreSQL + Docker + Nginx + HTTPS)
 
+> **Hozirgi exam-taker.uz serveri Docker'siz ishlaydi** — uning deploy tartibi:
+> [SERVER_DEPLOY_UZ.md](SERVER_DEPLOY_UZ.md). Bu hujjat Docker bilan yangi server ko'tarish uchun.
+
 Bu konfiguratsiya bitta production server uchun tayyorlangan. Tashqariga faqat Nginxning
 `80/443` portlari ochiladi; Django/Gunicorn va PostgreSQL Docker private networkda qoladi.
 
