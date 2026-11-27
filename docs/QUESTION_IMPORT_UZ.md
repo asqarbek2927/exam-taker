@@ -31,6 +31,32 @@ Fayldagi varaqlar:
 | `To'g'ri javob` | `A`; bir nechta javob uchun `A,C` (`a, c`, `A;C`, `AC` ham bo'ladi; kirillcha `А/В/С/Е` lotinchaga o'giriladi); `OPEN_ENDED` va `PYTHON_CODE` uchun bo'sh |
 | `Ball` | `1` dan `100` gacha, majburiy; kasr `2.5` yoki `2,5` |
 
+## AI (ChatGPT, Gemini, Claude) bilan to'ldirish
+
+Shablonda **`AI uchun yo'riqnoma`** varag'i bor: unda o'zbekcha va ruscha tayyor prompt hamda
+AI uchun aniq qoidalar yozilgan.
+
+1. Shablonni yuklab oling va AI'ga yuklang.
+2. Yo'riqnomadagi promptni nusxalab, `[MAVZU]` va `[SON]` ni almashtirib yuboring.
+3. AI qaytargan `.xlsx` faylni platformaga yuklang. Xato chiqsa — xato matnini AI'ga berib,
+   tuzattiring va qayta yuklang.
+
+Import AI'ning odatiy "xatolari"ni o'zi to'g'rilaydi:
+
+| AI yozgani | Tushuniladi |
+|---|---|
+| `Savollar` varag'i boshqa nom bilan (`Questions`) | sarlavhalari mos yagona varaq import qilinadi (`Namuna` hech qachon emas) |
+| `Ma’lumot`, `To‘g‘ri javob` ("aqlli" tirnoqlar), ortiqcha probel | `Ma'lumot`, `To'g'ri javob` |
+| `Ma'lumot` varag'ida qatorlar joyi o'zgargan | Kurs ID / Modul ID A ustunidagi yorliq bo'yicha topiladi |
+| Javob `B)`, `(A)`, `C.` | `B`, `A`, `C` |
+| Javob variant matni bilan: `tuple, str`, `To'g'ri` | mos variant harflari |
+| Variantlar `A) list`, `B) tuple` | `list`, `tuple` (faqat hamma variantda prefiks bo'lsa) |
+| Turi `Python code`, `Multiple choice` | `PYTHON_CODE`, `MULTIPLE_CHOICE` |
+
+Agar AI faylni noldan yaratib, `Ma'lumot` varag'ini (Kurs ID / Modul ID) tashlab yuborsa —
+import aniq xato beradi; bunday holda shablonni qayta yuklab, AI'dan aynan shu faylni
+to'ldirishni so'rang.
+
 ## 3. Faylni import qilish
 
 ```http

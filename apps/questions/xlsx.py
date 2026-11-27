@@ -17,6 +17,7 @@ from .choices import MANUAL_GRADED_TYPES
 INFO_SHEET = "Ma'lumot"
 QUESTIONS_SHEET = "Savollar"
 EXAMPLE_SHEET = "Namuna"
+AI_GUIDE_SHEET = "AI uchun yo'riqnoma"
 MAX_IMPORT_ROWS = 500
 OPTION_LETTERS = ("A", "B", "C", "D", "E", "F")
 QUESTION_HEADERS = [
@@ -135,6 +136,83 @@ def _add_example_rows(sheet) -> None:
         sheet.append(row)
 
 
+AI_PROMPT_UZ = (
+    "Ilova qilingan Excel fayldagi \"AI uchun yo'riqnoma\" varag'idagi qoidalarga qat'iy amal "
+    "qilib, \"Savollar\" varag'iga [MAVZU] bo'yicha [SON] ta savol qo'sh "
+    "(masalan: 4 ta SINGLE_CHOICE, 2 ta MULTIPLE_CHOICE, 2 ta TRUE_FALSE, 1 ta OPEN_ENDED, "
+    "1 ta PYTHON_CODE). Faylning qolgan qismini o'zgartirma va natijani aynan shu .xlsx fayl "
+    "ko'rinishida qaytar."
+)
+AI_PROMPT_RU = (
+    'Строго следуя правилам на листе "AI uchun yo\'riqnoma" в приложенном Excel-файле, добавь '
+    'на лист "Savollar" [КОЛИЧЕСТВО] вопросов по теме [ТЕМА] (например: 4 SINGLE_CHOICE, '
+    "2 MULTIPLE_CHOICE, 2 TRUE_FALSE, 1 OPEN_ENDED, 1 PYTHON_CODE). Остальную часть файла не "
+    "меняй и верни результат именно в виде этого .xlsx файла."
+)
+AI_RULES = [
+    "Faqat \"Savollar\" varag'iga, 2-qatordan boshlab yoz. 1-qatordagi sarlavhalarni o'zgartirma.",
+    "\"Ma'lumot\", \"Namuna\" va shu varaqni o'zgartirma, o'chirma; varaq nomlarini o'zgartirma, "
+    "yangi varaq qo'shma.",
+    "Har bir qator = 1 ta savol. Ustunlar: A = T/r (1, 2, 3...), B = Turi, C = Savol matni, "
+    "D–I = Variant A–F, J = To'g'ri javob, K = Ball.",
+    "Turi faqat quyidagilardan biri: SINGLE_CHOICE, MULTIPLE_CHOICE, TRUE_FALSE, OPEN_ENDED, "
+    "PYTHON_CODE.",
+    "SINGLE_CHOICE: 2–6 ta variant, aynan 1 ta to'g'ri javob harfi (masalan: B).",
+    "MULTIPLE_CHOICE: 2–6 ta variant, 1 yoki bir nechta to'g'ri javob, vergul bilan "
+    "(masalan: A,C).",
+    "TRUE_FALSE: aynan 2 ta variant (A = To'g'ri, B = Noto'g'ri) va 1 ta javob harfi.",
+    "OPEN_ENDED va PYTHON_CODE: variant ustunlari (D–I) va javob ustuni (J) BO'SH qoladi; "
+    "faqat savol matni va ball yoziladi.",
+    "Javob ustuniga faqat harf yoz (A–F), variant matnini emas.",
+    'Variant matni boshiga "A)" kabi harf yozma; bitta savol ichida variantlar takrorlanmasin.',
+    "Ball: 1 dan 100 gacha son (masalan: 2 yoki 2.5).",
+    "Bitta faylda 500 tadan ko'p savol bo'lmasin.",
+    "Natijani shu .xlsx fayl ko'rinishida qaytar (CSV yoki matnli jadval emas).",
+]
+
+
+def _add_ai_guide_sheet(workbook) -> None:
+    """Ustoz shablonni AI'ga berib to‘ldirtirishi uchun: tayyor prompt va aniq qoidalar.
+
+    Bu varaq import qilinmaydi.
+    """
+    sheet = workbook.create_sheet(AI_GUIDE_SHEET)
+    title_font = Font(bold=True, size=13, color="1F4E78")
+    section_fill = PatternFill("solid", fgColor="DDEBF7")
+    prompt_fill = PatternFill("solid", fgColor="FFF2CC")
+    wrap = Alignment(wrap_text=True, vertical="top")
+
+    def section(title: str) -> None:
+        sheet.append([title])
+        cell = sheet.cell(row=sheet.max_row, column=1)
+        cell.font = Font(bold=True)
+        cell.fill = section_fill
+
+    sheet.append(["AI (ChatGPT, Gemini, Claude va h.k.) bilan savollar tayyorlash"])
+    sheet.cell(row=1, column=1).font = title_font
+    sheet.append(
+        [
+            "1) Shu faylni AI'ga yuklang. 2) Pastdagi promptni nusxalab, [MAVZU] va [SON] ni "
+            "almashtiring. 3) AI qaytargan .xlsx faylni platformaga yuklang."
+        ]
+    )
+    sheet.append([])
+    section("Prompt (o'zbekcha)")
+    sheet.append([AI_PROMPT_UZ])
+    sheet.cell(row=sheet.max_row, column=1).fill = prompt_fill
+    section("Prompt (на русском)")
+    sheet.append([AI_PROMPT_RU])
+    sheet.cell(row=sheet.max_row, column=1).fill = prompt_fill
+    sheet.append([])
+    section("AI uchun qoidalar")
+    for number, rule in enumerate(AI_RULES, start=1):
+        sheet.append([f"{number}. {rule}"])
+    sheet.column_dimensions["A"].width = 120
+    for row in sheet.iter_rows():
+        for cell in row:
+            cell.alignment = wrap
+
+
 def build_question_import_template(*, course: Course, module: Module) -> bytes:
     workbook = Workbook()
     info = workbook.active
@@ -166,6 +244,8 @@ def build_question_import_template(*, course: Course, module: Module) -> bytes:
     _add_example_rows(example)
     _style_header(example)
 
+    _add_ai_guide_sheet(workbook)
+
     output = BytesIO()
     workbook.save(output)
     return output.getvalue()
@@ -179,11 +259,24 @@ def _text(value) -> str:
 _CYRILLIC_LOOKALIKES = str.maketrans({"А": "A", "В": "B", "С": "C", "Е": "E"})
 
 
+# AI va Word/Excel "aqlli" tirnoqlarni qo‘yadi: ‘ ’ ʼ ` ´ -> '
+_APOSTROPHES = str.maketrans({"‘": "'", "’": "'", "ʼ": "'", "`": "'", "´": "'"})
+
+
+def _norm(value) -> str:
+    """Sarlavha / varaq nomi solishtirish uchun: tirnoq, probel va registr farqisiz."""
+    return re.sub(r"\s+", " ", _text(value).translate(_APOSTROPHES)).casefold()
+
+
+_NORM_HEADERS = [_norm(header) for header in QUESTION_HEADERS]
+
+
 def _correct_letters(value) -> set[str]:
-    """`A`, `a, c`, `A;C`, `A C`, `AC`, kirillcha `А` — hammasi qabul qilinadi."""
+    """`A`, `a, c`, `A;C`, `AC`, `A)`, `(B)`, `C.`, kirillcha `А` — hammasi qabul qilinadi."""
     raw = _text(value).upper().translate(_CYRILLIC_LOOKALIKES)
     if not raw:
         return set()
+    raw = re.sub(r"[()\[\].:]", " ", raw)  # "A)", "(B)", "C." -> harfning o‘zi
     letters: set[str] = set()
     for part in re.split(r"[,;/\s]+", raw):
         if not part:
@@ -193,6 +286,43 @@ def _correct_letters(value) -> set[str]:
         else:
             letters.add(part)
     return letters
+
+
+def _strip_option_prefixes(options_by_letter: dict[str, str]) -> dict[str, str]:
+    """AI ko‘pincha `A) list`, `B. tuple` deb yozadi. Prefiks faqat HAMMA variant o‘z harfi
+    bilan boshlansa olib tashlanadi — oddiy matnga tasodifan tegmaslik uchun."""
+    if not options_by_letter:
+        return options_by_letter
+    stripped = {}
+    for letter, text in options_by_letter.items():
+        match = re.match(rf"^\(?{letter}\s*[).:\-]\s*(.+)$", text, flags=re.IGNORECASE)
+        if match is None or not match.group(1).strip():
+            return options_by_letter
+        stripped[letter] = match.group(1).strip()
+    return stripped
+
+
+def _letters_from_option_text(value, options_by_letter: dict[str, str]) -> set[str] | None:
+    """Javob harf o‘rniga variant matni bilan yozilgan bo‘lsa (`tuple, str`, `To'g'ri`).
+
+    Har bir qism biror variant matniga aynan mos kelsagina harflarga aylantiradi, aks holda None.
+    """
+    by_text = {_norm(text): letter for letter, text in options_by_letter.items()}
+    raw = _text(value)
+    if not raw or not by_text:
+        return None
+    whole = by_text.get(_norm(raw))  # variant matnining o‘zida vergul bo‘lishi mumkin
+    if whole is not None:
+        return {whole}
+    letters = set()
+    for part in re.split(r"[;,\n]+", raw):
+        if not part.strip():
+            continue
+        letter = by_text.get(_norm(part))
+        if letter is None:
+            return None
+        letters.add(letter)
+    return letters or None
 
 
 def _question_type(value) -> str:
@@ -207,23 +337,69 @@ def _points(value):
     return value
 
 
-def _parse_loaded_workbook(workbook) -> ParsedQuestionWorkbook:
-    if INFO_SHEET not in workbook.sheetnames or QUESTIONS_SHEET not in workbook.sheetnames:
-        raise QuestionXLSXError(
-            "XLSX formati noto'g'ri. Shablonni `import-template` endpointidan yuklab oling."
-        )
+def _sheet_by_name(workbook, name: str):
+    """Varaqni nomi bo‘yicha topadi (tirnoq/registr/probel farqisiz: `Ma’lumot` ham bo‘ladi)."""
+    wanted = _norm(name)
+    for sheet_name in workbook.sheetnames:
+        if _norm(sheet_name) == wanted:
+            return workbook[sheet_name]
+    return None
 
-    info = workbook[INFO_SHEET]
-    course_id = _text(info["B2"].value)
-    module_id = _text(info["B4"].value)
-    if not course_id or not module_id:
-        raise QuestionXLSXError("XLSX ichida Kurs ID va Modul ID bo'lishi shart.")
 
-    sheet = workbook[QUESTIONS_SHEET]
+def _header_matches(sheet) -> bool:
     width = len(QUESTION_HEADERS)
     header = next(sheet.iter_rows(min_row=1, max_row=1, max_col=width, values_only=True), ())
-    if [_text(value) for value in header] != QUESTION_HEADERS:
-        raise QuestionXLSXError("`Savollar` varag'idagi ustun nomlari o'zgartirilgan.")
+    return [_norm(value) for value in header] == _NORM_HEADERS
+
+
+def _questions_sheet(workbook):
+    """`Savollar` varag‘i; AI uni qayta nomlagan bo‘lsa — sarlavhalari mos keladigan yagona varaq.
+
+    `Namuna`, `Ma'lumot` va yo‘riqnoma varaqlari hech qachon import qilinmaydi.
+    """
+    sheet = _sheet_by_name(workbook, QUESTIONS_SHEET)
+    if sheet is not None:
+        if not _header_matches(sheet):
+            raise QuestionXLSXError("`Savollar` varag'idagi ustun nomlari o'zgartirilgan.")
+        return sheet
+    skipped = {_norm(EXAMPLE_SHEET), _norm(INFO_SHEET), _norm(AI_GUIDE_SHEET)}
+    candidates = [
+        workbook[name]
+        for name in workbook.sheetnames
+        if _norm(name) not in skipped and _header_matches(workbook[name])
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    raise QuestionXLSXError(
+        "XLSX formati noto'g'ri: `Savollar` varag'i topilmadi. "
+        "Shablonni `import-template` endpointidan yuklab oling."
+    )
+
+
+def _info_ids(workbook) -> tuple[str, str]:
+    """`Ma'lumot` varag‘idan Kurs ID va Modul ID: avval A ustunidagi yorliq bo‘yicha,
+    topilmasa — shablondagi joyidan (B2 / B4)."""
+    info = _sheet_by_name(workbook, INFO_SHEET)
+    if info is None:
+        raise QuestionXLSXError(
+            "XLSX formati noto'g'ri: `Ma'lumot` varag'i (Kurs ID va Modul ID) topilmadi. "
+            "Shablonni `import-template` endpointidan yuklab oling."
+        )
+    labelled: dict[str, str] = {}
+    for row in info.iter_rows(min_row=1, max_row=50, max_col=2, values_only=True):
+        label, value = (*row, None, None)[:2]
+        labelled.setdefault(_norm(label), _text(value))
+    course_id = labelled.get("kurs id") or _text(info["B2"].value)
+    module_id = labelled.get("modul id") or _text(info["B4"].value)
+    if not course_id or not module_id:
+        raise QuestionXLSXError("XLSX ichida Kurs ID va Modul ID bo'lishi shart.")
+    return course_id, module_id
+
+
+def _parse_loaded_workbook(workbook) -> ParsedQuestionWorkbook:
+    course_id, module_id = _info_ids(workbook)
+    sheet = _questions_sheet(workbook)
+    width = len(QUESTION_HEADERS)
 
     # `sheet.max_row` ishlatilmaydi: Excel/Google Sheets formatlangan bo‘sh qatorlarni ham
     # yozadi (max_row=1000), ba’zi dasturlar esa `<dimension>` ni umuman yozmaydi (None).
@@ -247,13 +423,20 @@ def _parse_loaded_workbook(workbook) -> ParsedQuestionWorkbook:
         correct_value, points = tail[len(OPTION_LETTERS) :]
 
         question_type = _question_type(question_type)
-        options_by_letter = {
-            letter: _text(value)
-            for letter, value in zip(OPTION_LETTERS, option_values, strict=True)
-            if _text(value)
-        }
+        options_by_letter = _strip_option_prefixes(
+            {
+                letter: _text(value)
+                for letter, value in zip(OPTION_LETTERS, option_values, strict=True)
+                if _text(value)
+            }
+        )
         correct = _correct_letters(correct_value)
         unknown_answers = correct - options_by_letter.keys()
+        if unknown_answers and question_type not in MANUAL_GRADED_TYPES:
+            # Javob harf emas, variant matni bilan yozilgan bo‘lishi mumkin (`tuple, str`).
+            from_text = _letters_from_option_text(correct_value, options_by_letter)
+            if from_text is not None:
+                correct, unknown_answers = from_text, set()
         if question_type in MANUAL_GRADED_TYPES and correct:
             row_errors.append(
                 f"{row_number}-qator: {question_type} savolda to'g'ri javob harfi "

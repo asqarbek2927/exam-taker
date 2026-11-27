@@ -67,3 +67,22 @@ def test_file_without_real_ids_gives_actionable_message(auth_client, import_ctx)
     assert response.status_code == 422
     assert "import-template" in response.json()["errors"]["course_id"][0]
     assert Question.objects.count() == 0
+
+
+def test_exam_5_file_imports_one_question_of_each_type(auth_client, import_ctx):  # noqa: F811
+    response = _post(auth_client, import_ctx, _upload("exam_5_savol.xlsx", import_ctx))
+    assert response.status_code == 201, response.json()
+    assert response.json()["created_count"] == 5
+    by_type = {question.type: question for question in Question.objects.all()}
+    assert sorted(by_type) == [
+        "MULTIPLE_CHOICE",
+        "OPEN_ENDED",
+        "PYTHON_CODE",
+        "SINGLE_CHOICE",
+        "TRUE_FALSE",
+    ]
+    assert sum(q.default_points for q in by_type.values()) == 15
+    correct = set(
+        by_type["MULTIPLE_CHOICE"].options.filter(is_correct=True).values_list("text", flat=True)
+    )
+    assert correct == {"tuple", "str"}

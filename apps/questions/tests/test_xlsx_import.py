@@ -51,7 +51,7 @@ def test_download_template_contains_course_module_and_examples(auth_client, impo
     assert response.status_code == 200
     assert response["Content-Disposition"].startswith("attachment;")
     workbook = load_workbook(BytesIO(response.content), read_only=True, data_only=True)
-    assert workbook.sheetnames == ["Ma'lumot", "Savollar", "Namuna"]
+    assert workbook.sheetnames == ["Ma'lumot", "Savollar", "Namuna", "AI uchun yo'riqnoma"]
     assert workbook["Ma'lumot"]["B2"].value == str(import_ctx["course"].id)
     assert workbook["Ma'lumot"]["B3"].value == import_ctx["course"].name
     assert workbook["Ma'lumot"]["B4"].value == str(import_ctx["module"].id)
