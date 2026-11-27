@@ -144,14 +144,18 @@ class QuestionUpdateSerializer(serializers.Serializer):
 class QuestionImportFileSerializer(serializers.Serializer):
     file = serializers.FileField(
         write_only=True,
-        help_text="`import-template` endpointidan olingan XLSX fayl.",
+        help_text=(
+            "`import-template` dan olingan XLSX yoki `import-template-json` dan olingan JSON fayl."
+        ),
     )
 
     def validate_file(self, value):
         if value.size > 5 * 1024 * 1024:
-            raise serializers.ValidationError("XLSX fayl hajmi 5 MB dan oshmasligi kerak.")
-        if not value.name.lower().endswith(".xlsx"):
-            raise serializers.ValidationError("Faqat .xlsx formatidagi fayl qabul qilinadi.")
+            raise serializers.ValidationError("Fayl hajmi 5 MB dan oshmasligi kerak.")
+        if not value.name.lower().endswith((".xlsx", ".json")):
+            raise serializers.ValidationError(
+                "Faqat .xlsx yoki .json formatidagi fayl qabul qilinadi."
+            )
         return value
 
 

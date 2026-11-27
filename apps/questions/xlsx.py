@@ -352,6 +352,54 @@ def _points(value):
     return value
 
 
+def build_question_data(
+    *,
+    label: str,
+    question_type,
+    question_text,
+    options_by_letter: dict[str, str],
+    correct_value,
+    points,
+) -> tuple[dict | None, str | None]:
+    """Bitta savolni (XLSX qatori yoki JSON elementi) `QuestionCreateSerializer` ma’lumotiga
+    aylantiradi. Qaytaradi: `(data, None)` yoki `(None, "<label>: xato matni")`.
+
+    `options_by_letter`: `{"A": "matn", ...}` — bo‘sh variantlarsiz, A–F tartibida.
+    """
+    question_type = _question_type(question_type)
+    options_by_letter = _strip_option_prefixes(options_by_letter)
+    if "?" in _text(correct_value):
+        # Yo‘riqnoma: manbada javob ko‘rsatilmagan bo‘lsa, AI taxmin qilmay `?` yozadi.
+        if question_type not in MANUAL_GRADED_TYPES:
+            return None, (
+                f"{label}: to'g'ri javob ko'rsatilmagan (?). Manbadan tekshirib, "
+                "javob harfini yozing."
+            )
+        correct_value = None  # bu turlarda javob baribir bo‘sh bo‘lishi kerak
+    correct = _correct_letters(correct_value)
+    unknown_answers = correct - options_by_letter.keys()
+    if unknown_answers and question_type not in MANUAL_GRADED_TYPES:
+        # Javob harf emas, variant matni bilan yozilgan bo‘lishi mumkin (`tuple, str`).
+        from_text = _letters_from_option_text(correct_value, options_by_letter)
+        if from_text is not None:
+            correct, unknown_answers = from_text, set()
+    if question_type in MANUAL_GRADED_TYPES and correct:
+        return None, f"{label}: {question_type} savolda to'g'ri javob harfi bo'lmasligi kerak."
+    if unknown_answers:
+        bad = ", ".join(sorted(unknown_answers))
+        return None, f"{label}: javob ({bad}) mavjud bo'lmagan variantni ko'rsatgan."
+    options = [
+        {"text": text, "is_correct": letter in correct}
+        for letter, text in options_by_letter.items()
+    ]
+    return {
+        "type": question_type,
+        "text": _text(question_text),
+        "options": options,
+        "default_points": _points(points),
+    }, None
+
+
 def _sheet_by_name(workbook, name: str):
     """Varaqni nomi bo‘yicha topadi (tirnoq/registr/probel farqisiz: `Ma’lumot` ham bo‘ladi)."""
     wanted = _norm(name)
@@ -436,60 +484,22 @@ def _parse_loaded_workbook(workbook) -> ParsedQuestionWorkbook:
         _, question_type, question_text, *tail = values
         option_values = tail[: len(OPTION_LETTERS)]
         correct_value, points = tail[len(OPTION_LETTERS) :]
-
-        question_type = _question_type(question_type)
-        options_by_letter = _strip_option_prefixes(
-            {
+        data, error = build_question_data(
+            label=f"{row_number}-qator",
+            question_type=question_type,
+            question_text=question_text,
+            options_by_letter={
                 letter: _text(value)
                 for letter, value in zip(OPTION_LETTERS, option_values, strict=True)
                 if _text(value)
-            }
+            },
+            correct_value=correct_value,
+            points=points,
         )
-        if "?" in _text(correct_value):
-            # Yo‘riqnoma: manbada javob ko‘rsatilmagan bo‘lsa, AI taxmin qilmay `?` yozadi.
-            if question_type in MANUAL_GRADED_TYPES:
-                correct_value = None  # bu turlarda javob ustuni baribir bo‘sh bo‘lishi kerak
-            else:
-                row_errors.append(
-                    f"{row_number}-qator: to'g'ri javob ko'rsatilmagan (?). Manbadan tekshirib, "
-                    "javob harfini yozing."
-                )
-                continue
-        correct = _correct_letters(correct_value)
-        unknown_answers = correct - options_by_letter.keys()
-        if unknown_answers and question_type not in MANUAL_GRADED_TYPES:
-            # Javob harf emas, variant matni bilan yozilgan bo‘lishi mumkin (`tuple, str`).
-            from_text = _letters_from_option_text(correct_value, options_by_letter)
-            if from_text is not None:
-                correct, unknown_answers = from_text, set()
-        if question_type in MANUAL_GRADED_TYPES and correct:
-            row_errors.append(
-                f"{row_number}-qator: {question_type} savolda to'g'ri javob harfi "
-                "bo'lmasligi kerak."
-            )
+        if error is not None:
+            row_errors.append(error)
             continue
-        if unknown_answers:
-            bad = ", ".join(sorted(unknown_answers))
-            row_errors.append(
-                f"{row_number}-qator: javob ({bad}) mavjud bo'lmagan variantni ko'rsatgan."
-            )
-            continue
-
-        options = [
-            {"text": text, "is_correct": letter in correct}
-            for letter, text in options_by_letter.items()
-        ]
-        questions.append(
-            ParsedQuestionRow(
-                row=row_number,
-                data={
-                    "type": question_type,
-                    "text": _text(question_text),
-                    "options": options,
-                    "default_points": _points(points),
-                },
-            )
-        )
+        questions.append(ParsedQuestionRow(row=row_number, data=data))
 
     if row_errors:
         raise QuestionXLSXError(row_errors)

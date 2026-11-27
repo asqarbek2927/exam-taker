@@ -1,4 +1,8 @@
-# Savollarni XLSX orqali import qilish
+# Savollarni XLSX yoki JSON orqali import qilish
+
+Ikki format bor va ikkalasi bir xil ishlaydi: **XLSX** (Excel) va **JSON**. Shablon
+tanlangan kurs/modul uchun yuklab olinadi, to'ldiriladi va bitta endpoint orqali
+yuklanadi — format fayl kengaytmasidan (`.xlsx` / `.json`) aniqlanadi.
 
 Import fayli bitta kurs va bitta modulga tegishli bo'ladi. `difficulty` faylda
 yozilmaydi; barcha import qilingan savollar uchun u avtomatik `MEDIUM` bo'ladi.
@@ -67,6 +71,61 @@ Agar AI faylni noldan yaratib, `Ma'lumot` varag'ini (Kurs ID / Modul ID) tashlab
 import aniq xato beradi; bunday holda shablonni qayta yuklab, AI'dan aynan shu faylni
 to'ldirishni so'rang.
 
+## JSON format
+
+### Shablonni yuklab olish
+
+```http
+GET /api/v1/questions/import-template-json?course_id=<UUID>&module_id=<UUID>
+Authorization: Bearer <token>
+```
+
+Javob — `.json` fayl (huquqlar va arxiv qoidasi XLSX shablon bilan bir xil):
+
+```json
+{
+  "format": "examtaker-questions",
+  "version": 1,
+  "course": {"id": "<kurs id>", "name": "Python"},
+  "module": {"id": "<modul id>", "title": "Module 1"},
+  "instructions": {"steps_uz": "...", "prompt_uz": "...", "prompt_ru": "...", "rules": ["..."]},
+  "example_questions": [ ... 5 ta namuna, import qilinmaydi ... ],
+  "questions": []
+}
+```
+
+Faqat `questions` ro'yxati to'ldiriladi; `course`, `module` ni o'zgartirmang.
+
+### Savol ko'rinishi
+
+```json
+{"type": "SINGLE_CHOICE",   "text": "len([1, 2, 3]) = ?", "options": ["2", "3", "4"], "correct": ["B"], "points": 2}
+{"type": "MULTIPLE_CHOICE", "text": "Immutable turlar?",  "options": ["list", "tuple", "str"], "correct": ["B", "C"], "points": 3}
+{"type": "TRUE_FALSE",      "text": "Indeks 0 dan boshlanadi.", "options": ["To'g'ri", "Noto'g'ri"], "correct": ["A"], "points": 1}
+{"type": "OPEN_ENDED",      "text": "List va tuple farqi?", "options": [], "correct": [], "points": 5}
+{"type": "PYTHON_CODE",     "text": "sum_even(numbers) funksiyasini yozing.", "options": [], "correct": [], "points": 5}
+```
+
+| Maydon | Qoida |
+|---|---|
+| `type` | XLSX dagi `Turi` bilan bir xil |
+| `text` | Savol matni |
+| `options` | Variant matnlari (2–6 ta); `OPEN_ENDED` / `PYTHON_CODE` uchun `[]` |
+| `correct` | To'g'ri variant harflari: 1-variant = `"A"`, 2-variant = `"B"`...; `OPEN_ENDED` / `PYTHON_CODE` uchun `[]`; javob noma'lum bo'lsa `["?"]` |
+| `points` | `1` dan `100` gacha |
+
+Import XLSX dagi kabi AI'ning odatiy "xatolari"ni ham qabul qiladi: natija ` ```json ` ichiga
+o'ralgan bo'lsa, kalitlar boshqacha (`question`, `answer`, `ball`, `variants`), variantlar
+`{"A": "...", "B": "..."}` yoki `[{"text": "...", "is_correct": true}]` ko'rinishida, javob
+`"A, C"` qatori yoki variant matni bilan yozilgan bo'lsa.
+
+Xatolarda qator raqami o'rniga **savol raqami** ko'rsatiladi (`questions` ro'yxatidagi tartib,
+1 dan boshlab): `errors.file` da `3-savol: ...`, `errors.rows` da `"row": "3"`.
+
+Namunalar: [question_import_namuna.json](question_import_namuna.json) (bo'sh shablon) va
+[xlsx_test/exam_5_savol.json](xlsx_test/exam_5_savol.json) (5 ta savol, ID'lar o'rniga
+`SHU_YERGA_...` — o'zingiznikini yozing).
+
 ## 3. Faylni import qilish
 
 ```http
@@ -74,7 +133,7 @@ POST /api/v1/questions/import
 Authorization: Bearer <token>
 Content-Type: multipart/form-data
 
-file=<to'ldirilgan questions.xlsx>
+file=<to'ldirilgan questions.xlsx yoki questions.json>
 ```
 
 Muvaffaqiyatli javob:

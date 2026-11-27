@@ -86,3 +86,22 @@ def test_exam_5_file_imports_one_question_of_each_type(auth_client, import_ctx):
         by_type["MULTIPLE_CHOICE"].options.filter(is_correct=True).values_list("text", flat=True)
     )
     assert correct == {"tuple", "str"}
+
+
+def test_exam_5_json_file_imports_one_question_of_each_type(auth_client, import_ctx):  # noqa: F811
+    import json
+
+    data = json.loads((FILES / "exam_5_savol.json").read_text(encoding="utf-8"))
+    data["course"]["id"] = str(import_ctx["course"].id)
+    data["module"]["id"] = str(import_ctx["module"].id)
+    upload = SimpleUploadedFile("exam_5_savol.json", json.dumps(data).encode("utf-8"))
+    response = _post(auth_client, import_ctx, upload)
+    assert response.status_code == 201, response.json()
+    assert response.json()["created_count"] == 5
+    assert sorted({q.type for q in Question.objects.all()}) == [
+        "MULTIPLE_CHOICE",
+        "OPEN_ENDED",
+        "PYTHON_CODE",
+        "SINGLE_CHOICE",
+        "TRUE_FALSE",
+    ]

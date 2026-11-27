@@ -1,0 +1,92 @@
+{
+  "format": "examtaker-questions",
+  "version": 1,
+  "course": {
+    "id": "SHU_YERGA_KURS_ID_YOZING",
+    "name": "(o'z kursingiz)"
+  },
+  "module": {
+    "id": "SHU_YERGA_MODUL_ID_YOZING",
+    "title": "(o'z modulingiz)"
+  },
+  "instructions": {
+    "steps_uz": "1) AI'ga shu shablonni va o'zingizning savollar faylingizni yuklang. 2) prompt_uz ni nusxalab, to'g'ri javoblar qanday belgilanganini yozing. 3) AI qaytargan .json faylni tekshiring va platformaga yuklang. Yoki savollarni o'zingiz \"questions\" ro'yxatiga yozing.",
+    "prompt_uz": "Senga ikkita fayl beryapman: 1) ExamTaker JSON shabloni (.json), 2) mening tayyor savollarim. Mening savollarimni shablondagi \"instructions\" bo'limidagi qoidalarga qat'iy amal qilib \"questions\" ro'yxatiga ko'chir. Yangi savol qo'shma, savol va variant matnlarini o'zgartirma va tarjima qilma. To'g'ri javoblar mening faylimda [QANDAY BELGILANGAN: masalan, * belgisi / qalin shrift / alohida javoblar ro'yxati] bilan ko'rsatilgan. Natijani aynan shu .json fayl ko'rinishida qaytar.",
+    "prompt_ru": "Я прикладываю два файла: 1) JSON-шаблон ExamTaker (.json), 2) мои готовые вопросы. Перенеси мои вопросы в список \"questions\" шаблона, строго следуя правилам в разделе \"instructions\". Не добавляй новых вопросов, не меняй и не переводи текст вопросов и вариантов. Правильные ответы в моём файле отмечены [КАК ОТМЕЧЕНЫ: например, знаком *, жирным шрифтом, отдельным списком ответов]. Верни результат именно в виде этого .json файла.",
+    "rules": [
+      "Faqat ustoz bergan savollarni ko'chir. O'zingdan yangi savol, variant yoki javob qo'shma; savol va variant matnini o'zgartirma, qisqartirma va tarjima qilma.",
+      "Manbadagi BARCHA savollarni ko'chir, birortasini ham tashlab ketma.",
+      "Manbada savolning to'g'ri javobi ko'rsatilmagan bo'lsa, TAXMIN QILMA — \"correct\": [\"?\"] deb yoz.",
+      "Savollarni faqat \"questions\" ro'yxatiga yoz. \"format\", \"version\", \"course\", \"module\", \"instructions\" va \"example_questions\" ni o'zgartirma.",
+      "Har bir savol: {\"type\": ..., \"text\": ..., \"options\": [...], \"correct\": [...], \"points\": ...}. Namunalar \"example_questions\" da.",
+      "type faqat quyidagilardan biri: SINGLE_CHOICE, MULTIPLE_CHOICE, TRUE_FALSE, OPEN_ENDED, PYTHON_CODE.",
+      "Turini manbadagi savolga qarab tanla: variantli va 1 ta javob — SINGLE_CHOICE; variantli va bir nechta javob — MULTIPLE_CHOICE; to'g'ri/noto'g'ri — TRUE_FALSE; javobni student o'zi yozadi — OPEN_ENDED; kod yozish topshirig'i — PYTHON_CODE.",
+      "\"options\" — variant matnlari ro'yxati (2–6 ta), tartibi manbadagidek. \"correct\" — to'g'ri variant harflari: 1-variant = \"A\", 2-variant = \"B\" va h.k.",
+      "SINGLE_CHOICE: aynan 1 ta javob (masalan: [\"B\"]). MULTIPLE_CHOICE: 1 yoki bir nechta (masalan: [\"A\", \"C\"]). TRUE_FALSE: aynan 2 ta variant va 1 ta javob.",
+      "OPEN_ENDED va PYTHON_CODE: \"options\": [] va \"correct\": [].",
+      "Variant matni boshiga \"A)\" kabi harf yozma; bitta savol ichida variantlar takrorlanmasin.",
+      "\"points\": manbada ko'rsatilgan bo'lsa — o'sha (1 dan 100 gacha); ko'rsatilmagan bo'lsa: SINGLE_CHOICE 2, MULTIPLE_CHOICE 3, TRUE_FALSE 1, OPEN_ENDED 5, PYTHON_CODE 5.",
+      "Bitta faylda 500 tadan ko'p savol bo'lmasin.",
+      "Natijani to'g'ri JSON fayl ko'rinishida qaytar: izohlarsiz, ``` belgilarisiz."
+    ]
+  },
+  "example_questions": [
+    {
+      "type": "SINGLE_CHOICE",
+      "text": "Kuchli parol qaysi javobda to'g'ri ko'rsatilgan?",
+      "options": [
+        "12345678",
+        "Azizbek2005",
+        "T7#mQ2!zLp9@",
+        "password"
+      ],
+      "correct": [
+        "C"
+      ],
+      "points": 2
+    },
+    {
+      "type": "MULTIPLE_CHOICE",
+      "text": "Qaysilari phishing xabarining belgilaridir?",
+      "options": [
+        "Shoshilinch havolani bosish talabi",
+        "Shubhali yoki xato yozilgan domen",
+        "Parolni yuborishni so'rash",
+        "Oldindan kelishilgan rasmiy xabar"
+      ],
+      "correct": [
+        "A",
+        "B",
+        "C"
+      ],
+      "points": 3
+    },
+    {
+      "type": "TRUE_FALSE",
+      "text": "HTTPS internet orqali yuborilayotgan ma'lumotlarni shifrlaydi.",
+      "options": [
+        "To'g'ri",
+        "Noto'g'ri"
+      ],
+      "correct": [
+        "A"
+      ],
+      "points": 1
+    },
+    {
+      "type": "OPEN_ENDED",
+      "text": "Ikki faktorli autentifikatsiya nima va u nima uchun kerak?",
+      "options": [],
+      "correct": [],
+      "points": 5
+    },
+    {
+      "type": "PYTHON_CODE",
+      "text": "Ikki sonni qo'shib natijani chiqaradigan Python funksiyasini yozing.",
+      "options": [],
+      "correct": [],
+      "points": 5
+    }
+  ],
+  "questions": []
+}

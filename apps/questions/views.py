@@ -18,6 +18,7 @@ from common.serializers import ArchivedResponseSerializer
 from . import selectors, services
 from .choices import QuestionStatus
 from .filters import QuestionFilter
+from .json_import import build_question_import_json_template, parse_question_import_json
 from .models import Question
 from .serializers import (
     QuestionBankSummarySerializer,
@@ -146,9 +147,36 @@ class QuestionViewSet(
 
     @extend_schema(
         tags=["questions"],
+        parameters=[QuestionImportTemplateQuerySerializer],
+        responses={(200, "application/json"): OpenApiTypes.BINARY},
+        description=(
+            "Tanlangan kurs va modul ma'lumotlari yozilgan JSON import shabloni (XLSX shablonning "
+            "JSON varianti): `course`, `module`, AI uchun `instructions`, `example_questions` va "
+            "to'ldiriladigan bo'sh `questions` ro'yxati."
+        ),
+    )
+    @action(detail=False, methods=["get"], url_path="import-template-json")
+    def import_template_json(self, request):
+        serializer = QuestionImportTemplateQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        course = serializer.validated_data["course"]
+        module = serializer.validated_data["module"]
+        services.validate_question_context(user=request.user, course=course, module=module)
+        content = build_question_import_json_template(course=course, module=module)
+        response = HttpResponse(content, content_type="application/json; charset=utf-8")
+        response["Content-Disposition"] = (
+            f'attachment; filename="questions-{course.id}-{module.id}.json"'
+        )
+        return response
+
+    @extend_schema(
+        tags=["questions"],
         request=QuestionImportFileSerializer,
         responses={201: QuestionImportResponseSerializer},
-        description="XLSX ichidagi barcha savollarni atomik tarzda question bankka import qiladi.",
+        description=(
+            "XLSX yoki JSON fayl ichidagi barcha savollarni atomik tarzda question bankka import "
+            "qiladi. Format fayl kengaytmasidan aniqlanadi (`.xlsx` / `.json`)."
+        ),
     )
     @action(
         detail=False,
@@ -159,8 +187,14 @@ class QuestionViewSet(
     def import_xlsx(self, request):
         upload = QuestionImportFileSerializer(data=request.data)
         upload.is_valid(raise_exception=True)
+        upload_file = upload.validated_data["file"]
+        parser = (
+            parse_question_import_json
+            if upload_file.name.lower().endswith(".json")
+            else parse_question_import
+        )
         try:
-            parsed = parse_question_import(upload.validated_data["file"])
+            parsed = parser(upload_file)
         except QuestionXLSXError as exc:
             raise serializers.ValidationError({"file": exc.messages}) from exc
 

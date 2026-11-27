@@ -3580,8 +3580,8 @@ paths:
   /api/v1/questions/import:
     post:
       operationId: v1_questions_import_create
-      description: XLSX ichidagi barcha savollarni atomik tarzda question bankka import
-        qiladi.
+      description: XLSX yoki JSON fayl ichidagi barcha savollarni atomik tarzda question
+        bankka import qiladi. Format fayl kengaytmasidan aniqlanadi (`.xlsx` / `.json`).
       tags:
       - questions
       requestBody:
@@ -3627,6 +3627,37 @@ paths:
         '200':
           content:
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/v1/questions/import-template-json:
+    get:
+      operationId: v1_questions_import_template_json_retrieve
+      description: 'Tanlangan kurs va modul ma''lumotlari yozilgan JSON import shabloni
+        (XLSX shablonning JSON varianti): `course`, `module`, AI uchun `instructions`,
+        `example_questions` va to''ldiriladigan bo''sh `questions` ro''yxati.'
+      parameters:
+      - in: query
+        name: course_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: module_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - questions
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
               schema:
                 type: string
                 format: binary
@@ -8013,7 +8044,8 @@ components:
           type: string
           format: binary
           writeOnly: true
-          description: '`import-template` endpointidan olingan XLSX fayl.'
+          description: '`import-template` dan olingan XLSX yoki `import-template-json`
+            dan olingan JSON fayl.'
       required:
       - file
     QuestionImportResponse:
