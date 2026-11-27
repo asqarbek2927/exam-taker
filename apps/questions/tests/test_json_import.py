@@ -267,3 +267,12 @@ def test_only_xlsx_and_json_files_are_accepted(auth_client, import_ctx):  # noqa
     response = _post(auth_client, import_ctx, b"text", name="questions.txt")
     assert response.status_code == 422
     assert ".json" in response.json()["errors"]["file"][0]
+
+
+@pytest.mark.parametrize("kind", ["deep", "huge_int"])
+def test_hostile_json_gives_422_not_500(auth_client, import_ctx, kind):  # noqa: F811
+    """Juda chuqur JSON va 4300+ xonali son oldin 500 (RecursionError/ValueError) berardi."""
+    payload = b"[" * 100000 + b"]" * 100000 if kind == "deep" else b'{"a": ' + b"9" * 5000 + b"}"
+    response = _post(auth_client, import_ctx, payload)
+    assert response.status_code == 422
+    assert "juda" in response.json()["errors"]["file"][0]

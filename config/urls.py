@@ -44,9 +44,11 @@ handler500 = "common.views.server_error"
 urlpatterns = [
     path("health/live", health_live, name="health-live"),
     path("health/ready", health_ready, name="health-ready"),
-    path("admin/", admin.site.urls),
     path("api/v1/", include(api_v1_patterns)),
 ]
+
+if settings.DJANGO_ADMIN_URL:
+    urlpatterns.append(path(settings.DJANGO_ADMIN_URL, admin.site.urls))
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

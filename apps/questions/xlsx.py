@@ -245,6 +245,12 @@ def build_question_import_template(*, course: Course, module: Module) -> bytes:
             "OPEN_ENDED va PYTHON_CODE: variant va javob harfi bo'sh",
         ]
     )
+    # Kurs/modul nomini teacher yozadi: `=HYPERLINK(...)` kabi nom Excel'da formula bo'lib
+    # ishlamasligi uchun qiymatlar majburan matn (string) sifatida saqlanadi.
+    for row in info.iter_rows(min_row=2, max_col=3):
+        for cell in row:
+            if isinstance(cell.value, str):
+                cell.data_type = "s"
     info.column_dimensions["A"].width = 20
     info.column_dimensions["B"].width = 50
     info.column_dimensions["C"].width = 45

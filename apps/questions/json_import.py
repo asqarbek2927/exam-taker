@@ -160,6 +160,11 @@ def _load_json(raw: bytes):
         raise QuestionXLSXError(
             f"JSON formati noto'g'ri: {exc.msg} ({exc.lineno}-qator, {exc.colno}-ustun)."
         ) from exc
+    except (RecursionError, ValueError) as exc:
+        # Juda chuqur ichma-ich ro‘yxatlar yoki 4300+ xonali sonlar — 500 emas, aniq xato.
+        raise QuestionXLSXError(
+            "JSON formati noto'g'ri: fayl juda chuqur yoki juda katta qiymatlarga ega."
+        ) from exc
 
 
 def _context_ids(data: dict) -> tuple[str, str]:

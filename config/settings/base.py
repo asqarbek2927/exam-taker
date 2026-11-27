@@ -218,6 +218,12 @@ ATTEMPT_GRACE_SECONDS = env.int("ATTEMPT_GRACE_SECONDS", default=10)
 ATTEMPT_FOCUS_VIOLATION_THRESHOLD = env.int("ATTEMPT_FOCUS_VIOLATION_THRESHOLD", default=3)
 ATTEMPT_MIN_HIDDEN_SECONDS = env.float("ATTEMPT_MIN_HIDDEN_SECONDS", default=2.5)
 
+# Django admin manzili. Prod da taxmin qilib bo‘lmaydigan yo‘l qo‘ying (masalan
+# `DJANGO_ADMIN_URL=panel-7f3k9q/`): admin login sahifasida urinishlar cheklovi yo‘q,
+# shuning uchun uni hamma biladigan `/admin/` da qoldirmaslik kerak. Bo‘sh — admin o‘chiq.
+DJANGO_ADMIN_URL = env("DJANGO_ADMIN_URL", default="admin/").strip().strip("/")
+DJANGO_ADMIN_URL = f"{DJANGO_ADMIN_URL}/" if DJANGO_ADMIN_URL else ""
+
 # API hujjatlari (/api/schema, /api/docs). Prod da sukut bo‘yicha o‘chiq.
 ENABLE_API_DOCS = env.bool("ENABLE_API_DOCS", default=DEBUG)
 

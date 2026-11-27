@@ -402,3 +402,16 @@ def test_all_answer_letter_errors_are_reported_at_once(auth_client, import_ctx):
     errors = response.json()["errors"]["file"]  # kalit va tip (ro‘yxat) o‘zgarmagan
     assert [error.split("-qator")[0] for error in errors] == ["2", "4", "5"]
     assert Question.objects.count() == 0
+
+
+def test_template_never_turns_names_into_excel_formulas():
+    """Formula injection: teacher modulni `=HYPERLINK(...)` deb nomlasa ham, boshqa ustozning
+    Excel'ida u formula bo'lib ishlamasligi kerak."""
+    from types import SimpleNamespace
+
+    course = SimpleNamespace(id="c", name='=HYPERLINK("http://evil","Click")')
+    module = SimpleNamespace(id="m", title="=1+1")
+    workbook = load_workbook(BytesIO(build_question_import_template(course=course, module=module)))
+    info = workbook["Ma'lumot"]
+    assert info["B3"].data_type == "s" and info["B3"].value == course.name
+    assert info["B5"].data_type == "s" and info["B5"].value == "=1+1"

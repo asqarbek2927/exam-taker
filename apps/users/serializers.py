@@ -1,3 +1,4 @@
+import logging
 import re
 
 from django.conf import settings
@@ -10,6 +11,7 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.throttling import BaseThrottle
 from rest_framework_simplejwt.exceptions import (
     InvalidToken,
     TokenBackendError,
@@ -29,6 +31,15 @@ from .choices import (
     UserStatus,
 )
 from .models import User
+
+security_logger = logging.getLogger("examtaker.security")
+
+
+def _client_ip(request) -> str:
+    """Throttling bilan bir xil IP (NUM_PROXIES hisobga olinadi)."""
+    if request is None:
+        return "-"
+    return BaseThrottle().get_ident(request) or "-"
 
 
 def validate_password_strength(value: str, user: User | None = None) -> str:
@@ -682,7 +693,20 @@ class LoginSerializer(serializers.Serializer):
             user = User.objects.filter(username__iexact=identifier).first()
             if user is None:
                 user = User.objects.filter(email__iexact=identifier).first()
-        if user is None or not user.is_active or not user.check_password(attrs["password"]):
+        # Parol HAR DOIM xeshlanadi: user topilmasa ham. Aks holda javob vaqti (2 ms vs 80 ms)
+        # qaysi username/email mavjudligini oshkor qiladi (timing enumeration).
+        if user is not None:
+            password_ok = user.check_password(attrs["password"])
+        else:
+            User().set_password(attrs["password"])
+            password_ok = False
+        if not password_ok or not user.is_active:
+            security_logger.warning(
+                "login_failed identifier=%r ip=%s reason=%s",
+                identifier[:150],
+                _client_ip(self.context.get("request")),
+                "bad_credentials" if not password_ok else "inactive",
+            )
             raise AuthenticationFailed(self.error_messages["no_active_account"])
         if (
             user.must_change_password
