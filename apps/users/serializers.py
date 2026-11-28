@@ -42,6 +42,21 @@ def _client_ip(request) -> str:
     return BaseThrottle().get_ident(request) or "-"
 
 
+def _audit_login(user, request) -> None:
+    """Muvaffaqiyatli login: kim, qachon, qaysi IP va qurilmadan (imtihon shubhalarida kerak)."""
+    from apps.audit.choices import AuditAction
+    from apps.audit.services import record_audit
+
+    user_agent = request.META.get("HTTP_USER_AGENT", "") if request is not None else ""
+    record_audit(
+        actor=user,
+        action=AuditAction.LOGIN_SUCCEEDED,
+        entity_type="session",
+        entity_id=user.pk,
+        metadata={"ip": _client_ip(request), "user_agent": user_agent[:300]},
+    )
+
+
 def validate_password_strength(value: str, user: User | None = None) -> str:
     errors = []
     if not re.search(r"[A-Z]", value):
@@ -717,6 +732,7 @@ class LoginSerializer(serializers.Serializer):
         self.user = user
         refresh = RefreshToken.for_user(user)
         update_last_login(None, user)
+        _audit_login(user, self.context.get("request"))
         return {
             "user": UserBriefSerializer(user).data,
             "access_token": str(refresh.access_token),

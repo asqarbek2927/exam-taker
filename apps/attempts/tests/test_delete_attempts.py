@@ -16,6 +16,8 @@ from apps.attempts.models import (
 )
 from apps.attempts.services import delete_attempts
 from apps.attempts.tests.conftest import option_id
+from apps.audit.choices import AuditAction
+from apps.audit.models import AuditLog
 from apps.users.tests.factories import StudentFactory
 
 pytestmark = pytest.mark.django_db
@@ -135,3 +137,24 @@ def test_command_date_filter(two_attempts):
     out = StringIO()
     call_command("delete_attempts", "--since", "2099-01-01", stdout=out)
     assert "Mos attempt topilmadi" in out.getvalue()
+
+
+# -------------------------------- attempts ----------------------------------
+def test_deleted_attempts_stay_in_audit_log_forever(api, make_world):
+    world = make_world(open_ended=False)
+    client = api(world.student)
+    attempt_id = client.start(world.assignment).json()["id"]
+    client.answer(
+        attempt_id, world.eq["single"], option_ids=[option_id(world.q["single"], "Right")]
+    )
+    client.submit(attempt_id)
+
+    call_command("delete_attempts", "--attempt", attempt_id, "--yes", stdout=StringIO())
+
+    (entry,) = AuditLog.objects.filter(action=AuditAction.ATTEMPTS_DELETED)
+    assert str(entry.entity_id) == attempt_id and entry.actor is None
+    meta = entry.metadata
+    assert meta["student_username"] == world.student.username
+    assert meta["exam_title"] == world.exam.title
+    assert meta["status"] == "GRADED" and float(meta["score"]) == 2.0
+    assert meta["submitted_at"]

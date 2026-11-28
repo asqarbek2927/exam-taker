@@ -1,3 +1,4 @@
+from django.db import transaction
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
     OpenApiParameter,
@@ -9,6 +10,8 @@ from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.audit.choices import AuditAction
+from apps.audit.services import record_audit
 from common.constants import UUID_REGEX
 from common.permissions import IsCreatorOrSuperAdmin, IsSuperAdmin, IsTeacher
 from common.serializers import ArchivedResponseSerializer
@@ -106,15 +109,33 @@ class ExamViewSet(
         exam = services.create_exam(user=request.user, **serializer.validated_data)
         return Response(self._detail(exam.pk), status=status.HTTP_201_CREATED)
 
+    def _audit(self, exam: Exam, action: str, *, entity_id=None, **metadata) -> None:
+        record_audit(
+            actor=self.request.user,
+            action=action,
+            entity_type="exam",
+            entity_id=entity_id or exam.pk,
+            metadata={"course_id": exam.course_id, "title": exam.title[:200], **metadata},
+        )
+
     def partial_update(self, request, *args, **kwargs):
         exam = self.get_object()
         serializer = ExamUpdateSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        services.update_exam(exam=exam, **serializer.validated_data)
+        with transaction.atomic():
+            services.update_exam(exam=exam, **serializer.validated_data)
+            exam.refresh_from_db()
+            self._audit(
+                exam, AuditAction.EXAM_UPDATED, changed_fields=sorted(serializer.validated_data)
+            )
         return Response(self._detail(exam.pk))
 
     def destroy(self, request, *args, **kwargs):
-        archived = services.delete_or_archive_exam(self.get_object())
+        exam = self.get_object()
+        exam_id = exam.pk  # butunlay o'chirilsa Django pk ni None qiladi
+        with transaction.atomic():
+            archived = services.delete_or_archive_exam(exam)
+            self._audit(exam, AuditAction.EXAM_DELETED, entity_id=exam_id, archived=archived)
         if archived:
             return Response({"archived": True}, status=status.HTTP_200_OK)
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -122,7 +143,9 @@ class ExamViewSet(
     @extend_schema(tags=["exams"], request=None, responses={200: ExamDetailSerializer})
     @action(detail=True, methods=["post"])
     def archive(self, request, pk=None):
-        exam = services.archive_exam(self.get_object())
+        with transaction.atomic():
+            exam = services.archive_exam(self.get_object())
+            self._audit(exam, AuditAction.EXAM_DELETED, archived=True)
         return Response(self._detail(exam.pk))
 
     @extend_schema(

@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.http import HttpResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
@@ -11,6 +12,8 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
+from apps.audit.choices import AuditAction
+from apps.audit.services import record_audit
 from common.constants import UUID_REGEX
 from common.permissions import IsCreatorOrSuperAdmin, IsSuperAdmin, IsTeacher
 from common.serializers import ArchivedResponseSerializer
@@ -232,7 +235,21 @@ class QuestionViewSet(
         if row_errors:
             raise serializers.ValidationError({"rows": row_errors})
 
-        created = services.import_questions(user=request.user, questions=validated_questions)
+        with transaction.atomic():
+            created = services.import_questions(user=request.user, questions=validated_questions)
+            record_audit(
+                actor=request.user,
+                action=AuditAction.QUESTIONS_IMPORTED,
+                entity_type="module",
+                entity_id=module.pk,
+                metadata={
+                    "course_id": course.pk,
+                    "module_id": module.pk,
+                    "count": len(created),
+                    "format": "json" if upload_file.name.lower().endswith(".json") else "xlsx",
+                    "file_name": upload_file.name[:200],
+                },
+            )
         response_data = {
             "created_count": len(created),
             "course_id": course.id,
@@ -250,15 +267,43 @@ class QuestionViewSet(
         question = services.create_question(user=request.user, **serializer.validated_data)
         return self._detail_response(question.pk, status.HTTP_201_CREATED)
 
+    def _audit(self, question: Question, action: str, *, entity_id=None, **metadata) -> None:
+        record_audit(
+            actor=self.request.user,
+            action=action,
+            entity_type="question",
+            entity_id=entity_id or question.pk,
+            metadata={
+                "course_id": question.course_id,
+                "module_id": question.module_id,
+                "type": question.type,
+                "question_text": question.text[:200],
+                **metadata,
+            },
+        )
+
     def partial_update(self, request, *args, **kwargs):
         question = self.get_object()
         serializer = QuestionUpdateSerializer(question, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        services.update_question(question=question, **serializer.validated_data)
+        with transaction.atomic():
+            services.update_question(question=question, **serializer.validated_data)
+            # Faqat o'zgargan maydon nomlari; "options" — variantlar yoki to'g'ri javob o'zgargan.
+            self._audit(
+                question,
+                AuditAction.QUESTION_UPDATED,
+                changed_fields=sorted(serializer.validated_data),
+            )
         return self._detail_response(question.pk)
 
     def destroy(self, request, *args, **kwargs):
-        archived = services.delete_or_archive_question(self.get_object())
+        question = self.get_object()
+        question_id = question.pk  # butunlay o'chirilsa Django pk ni None qiladi
+        with transaction.atomic():
+            archived = services.delete_or_archive_question(question)
+            self._audit(
+                question, AuditAction.QUESTION_DELETED, entity_id=question_id, archived=archived
+            )
         if archived:
             return Response({"archived": True}, status=status.HTTP_200_OK)
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -266,11 +311,15 @@ class QuestionViewSet(
     @extend_schema(tags=["questions"], request=None, responses={200: QuestionDetailSerializer})
     @action(detail=True, methods=["post"])
     def archive(self, request, pk=None):
-        question = services.archive_question(self.get_object())
+        with transaction.atomic():
+            question = services.archive_question(self.get_object())
+            self._audit(question, AuditAction.QUESTION_DELETED, archived=True)
         return self._detail_response(question.pk)
 
     @extend_schema(tags=["questions"], request=None, responses={200: QuestionDetailSerializer})
     @action(detail=True, methods=["post"])
     def restore(self, request, pk=None):
-        question = services.restore_question(self.get_object())
+        with transaction.atomic():
+            question = services.restore_question(self.get_object())
+            self._audit(question, AuditAction.QUESTION_RESTORED)
         return self._detail_response(question.pk)

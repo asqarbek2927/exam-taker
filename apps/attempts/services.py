@@ -672,16 +672,37 @@ def grade_answer(
 # Test attempt'larni o'chirish (faqat server administratori, management command orqali)
 # --------------------------------------------------------------------------
 @transaction.atomic
-def delete_attempts(attempts) -> int:
+def delete_attempts(attempts, *, actor=None) -> int:
     """Attempt'larni javoblari, tanlangan variantlari va event'lari bilan birga o'chiradi.
 
     Oddiy `ExamAttempt.delete()` ishlamaydi: `StudentAnswer.attempt_question` va
     `StudentAnswerOption.attempt_option` PROTECT — shuning uchun bolalari avval
-    to'g'ri tartibda o'chiriladi. Qaytaradi: o'chirilgan attempt'lar soni.
+    to'g'ri tartibda o'chiriladi. Har bir o'chirilgan attempt audit log'da abadiy qoladi
+    (kim edi, qaysi imtihon, qancha ball). Qaytaradi: o'chirilgan attempt'lar soni.
     """
-    attempt_ids = list(attempts.values_list("pk", flat=True))
-    if not attempt_ids:
+    rows = list(attempts.select_related("student", "assignment__exam"))
+    if not rows:
         return 0
+    attempt_ids = [attempt.pk for attempt in rows]
+    for attempt in rows:
+        record_audit(
+            actor=actor,
+            action=AuditAction.ATTEMPTS_DELETED,
+            entity_type="attempt",
+            entity_id=attempt.pk,
+            metadata={
+                "student_id": attempt.student_id,
+                "student_username": attempt.student.username,
+                "assignment_id": attempt.assignment_id,
+                "exam_title": attempt.assignment.exam.title,
+                "attempt_number": attempt.attempt_number,
+                "status": attempt.status,
+                "score": attempt.score,
+                "percentage": attempt.percentage,
+                "started_at": attempt.started_at.isoformat(),
+                "submitted_at": attempt.submitted_at.isoformat() if attempt.submitted_at else None,
+            },
+        )
     StudentAnswerOption.objects.filter(student_answer__attempt_id__in=attempt_ids).delete()
     StudentAnswer.objects.filter(attempt_id__in=attempt_ids).delete()
     # Qolganlari (AttemptQuestion, AttemptQuestionOption, AttemptEvent) CASCADE bilan ketadi.
