@@ -666,3 +666,24 @@ def grade_answer(
         },
     )
     return answer, attempt
+
+
+# --------------------------------------------------------------------------
+# Test attempt'larni o'chirish (faqat server administratori, management command orqali)
+# --------------------------------------------------------------------------
+@transaction.atomic
+def delete_attempts(attempts) -> int:
+    """Attempt'larni javoblari, tanlangan variantlari va event'lari bilan birga o'chiradi.
+
+    Oddiy `ExamAttempt.delete()` ishlamaydi: `StudentAnswer.attempt_question` va
+    `StudentAnswerOption.attempt_option` PROTECT — shuning uchun bolalari avval
+    to'g'ri tartibda o'chiriladi. Qaytaradi: o'chirilgan attempt'lar soni.
+    """
+    attempt_ids = list(attempts.values_list("pk", flat=True))
+    if not attempt_ids:
+        return 0
+    StudentAnswerOption.objects.filter(student_answer__attempt_id__in=attempt_ids).delete()
+    StudentAnswer.objects.filter(attempt_id__in=attempt_ids).delete()
+    # Qolganlari (AttemptQuestion, AttemptQuestionOption, AttemptEvent) CASCADE bilan ketadi.
+    ExamAttempt.objects.filter(pk__in=attempt_ids).delete()
+    return len(attempt_ids)
